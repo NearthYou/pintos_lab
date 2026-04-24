@@ -1,6 +1,10 @@
 {
     "name": "pintos-dev-clion",
-    "dockerFile": "Dockerfile",
+    // VSCode와 같은 Pintos 개발 이미지를 쓰기 위해 루트 Dev Container Dockerfile을 공유합니다.
+    "build": {
+        "dockerfile": "../Dockerfile",
+        "context": "../.."
+    },
     "remoteUser": "jungle",
 
     // CLion에서도 기존 activate 경로를 그대로 쓰기 위해 workspace 경로를 고정합니다.

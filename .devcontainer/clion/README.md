@@ -1,146 +1,97 @@
 # Pintos CLion 개발 가이드
 
-이 저장소는 `.devcontainer` 기반 사용만 지원합니다. 문서는 CLion + Dev Container 기준으로만 설명합니다.
+CLion은 Dev Container로 열지 말고 저장소 루트를 로컬 프로젝트로 엽니다.
+IDE는 로컬에서 돌고, 빌드/실행만 Docker 컨테이너에서 수행합니다.
 
-## 준비물
+CLion용 설정도 VSCode와 같은 `.devcontainer/Dockerfile`을 사용합니다.
+컨테이너 내부 경로는 `/workspaces/pintos_22.04_lab_docker`입니다.
+
+## 준비
 
 - Docker Desktop
 - CLion
-- JetBrains Dev Containers 사용 가능 환경
 
-## 시작하기
-
-프로젝트를 받은 뒤 CLion에서 저장소 루트를 엽니다.
+처음 한 번 이미지를 빌드합니다.
 
 ```bash
-git clone --depth=1 https://github.com/krafton-jungle/pintos_22.04_lab_docker.git
-cd pintos_22.04_lab_docker
+make image
 ```
 
-CLion에서는 JetBrains Dev Containers로 `.devcontainer/clion/devcontainer.json`을 선택해 컨테이너를 생성합니다.
+## Make로 빌드/채점
 
-- 처음 빌드에는 시간이 걸릴 수 있습니다.
-- 컨테이너 내부 작업 디렉터리는 `/workspaces/pintos_22.04_lab_docker`입니다.
-- 컨테이너 터미널은 `pintos/activate`를 자동으로 읽도록 설정되어 있습니다.
-
-`pintos` 명령이 잡히지 않으면 한 번만 아래를 실행하면 됩니다.
+테스트 통과 여부를 볼 때는 `result` 타깃을 사용합니다. 이 방식은 `.output`,
+`.errors`, `.result`를 만들고 `PASS`/`FAIL`을 판정합니다.
+이 문서는 `make` 기준으로 사용합니다. `pintos` 명령을 직접 실행할 수도 있지만,
+직접 실행하면 빌드 여부, 실행 경로, Docker 포트 매핑, 테스트 판정을 따로 맞춰야
+해서 실수하기 쉽습니다.
 
 ```bash
-source /workspaces/pintos_22.04_lab_docker/pintos/activate
+make threads
+make threads-result TEST=alarm-zero
 ```
 
-## 기본 작업 위치
+`threads-result`는 테스트 후 자동 종료됩니다. `threads-run`은 `-q` 없이 실행되므로
+`PASS` 후 QEMU가 남을 수 있습니다.
 
-주차별 기본 디렉터리는 아래와 같습니다.
+네 프로젝트는 `PROJECT`와 `TEST`를 바꿔 실행합니다.
 
 ```bash
-cd /workspaces/pintos_22.04_lab_docker/pintos/threads   # Project 1
-# cd /workspaces/pintos_22.04_lab_docker/pintos/userprog  # Project 2
-# cd /workspaces/pintos_22.04_lab_docker/pintos/vm        # Project 3
+make result PROJECT=threads TEST=alarm-zero
+make result PROJECT=userprog TEST=args-none
+make result PROJECT=vm TEST=pt-grow-stack
+make result PROJECT=filesys TEST=base/sm-create
 ```
 
-## 빌드와 테스트
-
-가장 기본적인 작업 순서는 아래와 같습니다.
+컨테이너 셸이 필요하면:
 
 ```bash
-cd /workspaces/pintos_22.04_lab_docker/pintos/threads
-make
-make check
+make shell PROJECT=threads
 ```
 
-특정 테스트만 실행하려면 `build` 디렉터리에서 실행합니다.
+## 디버깅
 
 ```bash
-cd /workspaces/pintos_22.04_lab_docker/pintos/threads/build
-make tests/threads/alarm-zero.result
+make threads-gdb TEST=alarm-zero
 ```
 
-자주 쓰는 예시는 아래와 같습니다.
+그 다음 CLion에서 `Pintos Remote Debug`를 Debug로 실행해 attach합니다.
+재실행 전에 남은 컨테이너는 아래 `1234` 포트 정리 명령으로 제거합니다
+(원래는 `make` 실행 터미널에서 QEMU를 끄는 게 좋지만, 현재는 시도해도 종료되지
+않아 컨테이너를 정리합니다).
+
+`threads-gdb`는 디버거가 붙을 때까지 QEMU를 멈춰두는 용도라 테스트 후 자동 종료를
+기대하지 않습니다. 채점만 할 때는 `threads-result`를 사용합니다.
+
+## 1234 포트가 이미 사용 중일 때
+
+이전 GDB 컨테이너가 남아 있으면 `port is already allocated`가 납니다.
+
+확인 없이 바로 정리하려면:
 
 ```bash
-cd /workspaces/pintos_22.04_lab_docker/pintos/threads
-make
-
-cd /workspaces/pintos_22.04_lab_docker/pintos/threads/build
-pintos -- run alarm-multiple
+containers=$(docker ps -aq --filter "publish=1234" --filter "ancestor=pintos-dev:22.04"); [ -z "$containers" ] || docker rm -f $containers
 ```
 
-## CLion 디버거 사용법
+이 명령은 `1234` 포트를 쓰는 모든 프로세스를 지우는 게 아니라, `pintos-dev:22.04`
+이미지로 뜬 Docker 컨테이너 중 `1234` 포트를 publish한 것만 제거합니다. 그래서
+이전 Pintos GDB 컨테이너만 정리하면서 다른 Docker 컨테이너를 건드릴 가능성을
+줄입니다.
 
-가장 단순한 방식은 터미널에서 QEMU를 `gdb stub` 모드로 띄운 뒤, CLion이 원격 디버거로 attach 하는 방식입니다.
-
-### 1. 커널 빌드
+확인 후 지우려면:
 
 ```bash
-cd /workspaces/pintos_22.04_lab_docker/pintos/threads
-make
+docker ps -a --filter "publish=1234" --filter "ancestor=pintos-dev:22.04" --format "table {{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Ports}}"
+docker rm -f <CONTAINER_ID>
 ```
 
-### 2. QEMU를 디버그 대기 상태로 실행
+macOS에서 포트 점유만 확인하려면:
 
 ```bash
-cd /workspaces/pintos_22.04_lab_docker/pintos/threads/build
-pintos --gdb -- run alarm-multiple
+lsof -nP -iTCP:1234 -sTCP:LISTEN
 ```
 
-이 명령은 QEMU를 실행한 뒤 디버거 연결을 기다립니다. 터미널이 멈춘 것처럼 보여도 정상입니다.
-
-### 3. CLion에서 Remote Debug 설정 선택
-
-이 저장소에는 CLion Remote Debug 설정이 `.idea/runConfigurations/Pintos_Remote_Debug.xml`로 포함되어 있습니다. CLion 상단 실행 설정에서 `Pintos Remote Debug`를 선택하면 됩니다.
-
-설정값은 아래와 같습니다.
+## CLion Remote Debug 설정
 
 - `Debugger`: `GDB`
 - `Target`: `tcp:127.0.0.1:1234`
-- `Symbol file`: `/workspaces/pintos_22.04_lab_docker/pintos/threads/build/kernel.o`
-
-중요:
-
-- 심볼 파일은 `kernel.bin`이 아니라 `kernel.o`를 사용해야 합니다.
-- `pintos --gdb`는 QEMU를 `1234` 포트에서 대기시키므로 CLion도 같은 포트로 붙어야 합니다.
-
-### 4. 브레이크포인트 후 디버그 시작
-
-소스에 브레이크포인트를 건 뒤 CLion에서 `Pintos Remote Debug` 설정을 실행합니다.
-
-처음에는 아래 위치가 확인하기 쉽습니다.
-
-- `threads/init.c`
-- `threads/thread.c`
-- `devices/timer.c`
-
-CLion이 attach 되면 `Resume`으로 커널 실행을 이어갈 수 있습니다.
-
-## 디버깅 예시 명령
-
-```bash
-cd /workspaces/pintos_22.04_lab_docker/pintos/threads
-make
-
-cd /workspaces/pintos_22.04_lab_docker/pintos/threads/build
-pintos --gdb -- run alarm-zero
-```
-
-이후 CLion `Pintos Remote Debug`에서 `kernel.o`에 attach 하면 됩니다.
-
-## 문제 해결
-
-`pintos` 명령이 없을 때:
-
-```bash
-source /workspaces/pintos_22.04_lab_docker/pintos/activate
-```
-
-CLion이 attach 하지 못할 때:
-
-- `pintos --gdb -- ...`가 먼저 실행되어 있어야 합니다.
-- CLion 실행 설정이 `Pintos Remote Debug`인지 확인합니다.
-- `Pintos Remote Debug`의 `Target`이 `tcp:127.0.0.1:1234`인지 확인합니다.
-- `Pintos Remote Debug`의 `Symbol file`이 현재 빌드한 `kernel.o`인지 확인합니다.
-
-브레이크포인트가 맞지 않을 때:
-
-- `make`를 다시 실행합니다.
-- `threads/build/kernel.o` 경로가 맞는지 확인합니다.
+- `Symbol file`: `$PROJECT_DIR$/pintos/threads/build/kernel.o`
