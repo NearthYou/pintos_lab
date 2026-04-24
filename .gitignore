@@ -11,6 +11,7 @@
 *.ilk
 *.map
 *.exp
+*.lst
 
 # Precompiled Headers
 *.gch
@@ -28,19 +29,26 @@
 *.so.*
 *.dylib
 
-# Executables
+# Executables and images
 *.exe
 *.out
 *.app
 *.i*86
 *.x86_64
 *.hex
+*.bin
+*.img
+*.qemu
+*.raw
+*.dis
+*.dump
 
 # Debug files
 *.dSYM/
 *.su
 *.idb
 *.pdb
+*.log
 
 # Kernel Module Compile Results
 *.mod*
@@ -50,6 +58,20 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+
+# Build directories
+**/build/
+**/bin/
+**/obj/
+**/output/
+
+# Temporary files
+*~
+*.swp
+core
+
+# macOS
+.DS_Store
 
 # debug information files
 *.dwo
