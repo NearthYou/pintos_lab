@@ -1,18 +1,18 @@
 #ifndef __LIB_ROUND_H
 #define __LIB_ROUND_H
 
-/* Yields X rounded up to the nearest multiple of STEP.
- * For X >= 0, STEP >= 1 only. */
+/* X는 STEP의 가장 가까운 배수로 반올림됩니다.
+ * X >= 0의 경우 STEP >= 1만 해당됩니다. */
 #define ROUND_UP(X, STEP) (((X) + (STEP) - 1) / (STEP) * (STEP))
 
-/* Yields X divided by STEP, rounded up.
- * For X >= 0, STEP >= 1 only. */
+/* X를 STEP로 나누어 반올림한 결과를 얻습니다.
+ * X >= 0의 경우 STEP >= 1만 해당됩니다. */
 #define DIV_ROUND_UP(X, STEP) (((X) + (STEP) - 1) / (STEP))
 
-/* Yields X rounded down to the nearest multiple of STEP.
- * For X >= 0, STEP >= 1 only. */
+/* X는 STEP의 가장 가까운 배수로 내림됩니다.
+ * X >= 0의 경우 STEP >= 1만 해당됩니다. */
 #define ROUND_DOWN(X, STEP) ((X) / (STEP) * (STEP))
 
-/* There is no DIV_ROUND_DOWN.   It would be simply X / STEP. */
+/* DIV_ROUND_DOWN 이 없습니다. 그것은 단순히 X / STEP 입니다. */
 
 #endif /* lib/round.h */
