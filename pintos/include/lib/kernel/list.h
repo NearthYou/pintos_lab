@@ -1,112 +1,112 @@
 #ifndef __LIB_KERNEL_LIST_H
 #define __LIB_KERNEL_LIST_H
 
-/* 이중 연결 리스트.
+/* Doubly linked list.
  *
- * 이중 연결 리스트의 구현에는 다음이 필요하지 않습니다.
- * 동적으로 할당된 메모리를 사용합니다. 대신 각 구조는
- * 이는 잠재적인 목록 요소이므로 list_elem 구조체를 포함해야 합니다.
- * 회원. 모든 목록 함수는 이러한 `struct에서 작동합니다.
- * list_elem's. list_entry 매크로는 다음에서 변환을 허용합니다.
- * struct list_elem을 이를 포함하는 구조 객체로 다시 되돌립니다.
+ * This implementation of a doubly linked list does not require
+ * use of dynamically allocated memory.  Instead, each structure
+ * that is a potential list element must embed a struct list_elem
+ * member.  All of the list functions operate on these `struct
+ * list_elem's.  The list_entry macro allows conversion from a
+ * struct list_elem back to a structure object that contains it.
 
- * 예를 들어 `struct' 목록이 필요하다고 가정해 보겠습니다.
- * 푸'. `struct foo' should contain a ` 구조체 목록_elem'
- * 회원은 다음과 같습니다.
+ * For example, suppose there is a needed for a list of `struct
+ * foo'.  `struct foo' should contain a `struct list_elem'
+ * member, like so:
 
- * 구조체 foo {
- *   구조체 list_elem elem;
- *   int 바;
- *   ...다른 멤버들...
+ * struct foo {
+ *   struct list_elem elem;
+ *   int bar;
+ *   ...other members...
  * };
 
- * 그런 다음 `struct foo' 목록을 선언하고 초기화할 수 있습니다.
- * 이렇게:
+ * Then a list of `struct foo' can be be declared and initialized
+ * like so:
 
- * 구조체 목록 foo_list;
+ * struct list foo_list;
 
- * list_init(&foo_list);
+ * list_init (&foo_list);
 
- * 반복은 다음을 수행해야 하는 일반적인 상황입니다.
- * struct list_elem에서 다시 둘러싸는 것으로 변환
- * 구조. foo_list를 사용한 예는 다음과 같습니다.
+ * Iteration is a typical situation where it is necessary to
+ * convert from a struct list_elem back to its enclosing
+ * structure.  Here's an example using foo_list:
 
- * 구조체 list_elem *e;
+ * struct list_elem *e;
 
  * for (e = list_begin (&foo_list); e != list_end (&foo_list);
  * e = list_next (e)) {
  *   struct foo *f = list_entry (e, struct foo, elem);
- *   ...f로 뭔가를 해보세요...
+ *   ...do something with f...
  * }
 
- * 목록 전체에서 실제 목록 사용 예를 찾을 수 있습니다.
- * 원천; 예를 들어, malloc.c, palloc.c 및 thread.c가 있습니다.
- * 스레드 디렉토리는 모두 목록을 사용합니다.
+ * You can find real examples of list usage throughout the
+ * source; for example, malloc.c, palloc.c, and thread.c in the
+ * threads directory all use lists.
 
- * 이 목록의 인터페이스는 list<> 템플릿에서 영감을 받았습니다.
- * C++ STL 에서. list<>에 익숙하다면 다음을 수행해야 합니다.
- * 이것을 사용하기 쉽다는 것을 알았습니다. 그러나 강조해야 할 점은
- * 이 목록은 유형 검사를 *아무* 수행하지 않으며 다른 많은 작업을 수행할 수 없습니다.
- * 정확성 검사. 망치면 물릴 것입니다.
+ * The interface for this list is inspired by the list<> template
+ * in the C++ STL.  If you're familiar with list<>, you should
+ * find this easy to use.  However, it should be emphasized that
+ * these lists do *no* type checking and can't do much other
+ * correctness checking.  If you screw up, it will bite you.
 
- * 목록 용어집:
+ * Glossary of list terms:
 
- * - "front": 목록의 첫 번째 요소입니다. 정의되지 않음
- * 빈 목록. list_front()에 의해 반환되었습니다.
+ * - "front": The first element in a list.  Undefined in an
+ * empty list.  Returned by list_front().
 
- * - "뒤로": 목록의 마지막 요소입니다. 빈 공간에 정의되지 않음
- * 목록. list_back()에 의해 반환되었습니다.
+ * - "back": The last element in a list.  Undefined in an empty
+ * list.  Returned by list_back().
 
- * - "tail": 비유적으로 마지막 요소 바로 뒤의 요소
- * 목록의 요소입니다. 빈 목록에서도 잘 정의됩니다.
- * list_end()에 의해 반환되었습니다. 최종 파수꾼으로 사용됨
- * 앞에서 뒤로 반복.
+ * - "tail": The element figuratively just after the last
+ * element of a list.  Well defined even in an empty list.
+ * Returned by list_end().  Used as the end sentinel for an
+ * iteration from front to back.
 
- * - "시작": 비어 있지 않은 목록에서 맨 앞. 비어있는
- * 목록, 꼬리. list_begin()에 의해 반환되었습니다. 다음과 같이 사용됨
- * 앞에서 뒤로 반복의 시작점입니다.
+ * - "beginning": In a non-empty list, the front.  In an empty
+ * list, the tail.  Returned by list_begin().  Used as the
+ * starting point for an iteration from front to back.
 
- * - "head": 비유적으로 첫 번째 바로 앞의 요소
- * 목록의 요소입니다. 빈 목록에서도 잘 정의됩니다.
- * list_rend()에 의해 반환되었습니다. 최종 파수꾼으로 사용됨
- * 뒤에서 앞으로 반복.
+ * - "head": The element figuratively just before the first
+ * element of a list.  Well defined even in an empty list.
+ * Returned by list_rend().  Used as the end sentinel for an
+ * iteration from back to front.
 
- * - "역방향 시작": 비어 있지 않은 목록에서 맨 뒤입니다. 에
- * 빈 목록, 머리. list_rbegin()에 의해 반환되었습니다. 다음과 같이 사용됨
- * 뒤에서 앞으로 반복하는 시작점입니다.
+ * - "reverse beginning": In a non-empty list, the back.  In an
+ * empty list, the head.  Returned by list_rbegin().  Used as
+ * the starting point for an iteration from back to front.
  *
- * - "내부 요소": 머리 또는 머리가 아닌 요소
- * tail, 즉 실제 목록 요소입니다. 빈 목록은
- * 내부 요소가 없습니다.*/
+ * - "interior element": An element that is not the head or
+ * tail, that is, a real list element.  An empty list does
+ * not have any interior elements.*/
 
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
-/* 목록 요소. */
+/* List element. */
 struct list_elem {
-	struct list_elem *prev;     /* 이전 목록 요소입니다. */
-	struct list_elem *next;     /* 다음 목록 요소입니다. */
+	struct list_elem *prev;     /* Previous list element. */
+	struct list_elem *next;     /* Next list element. */
 };
 
-/* 목록. */
+/* List. */
 struct list {
-	struct list_elem head;      /* 목록 머리. */
-	struct list_elem tail;      /* 꼬리를 나열하십시오. */
+	struct list_elem head;      /* List head. */
+	struct list_elem tail;      /* List tail. */
 };
 
-/* 목록 요소 LIST_ELEM에 대한 포인터를 포인터로 변환합니다.
-   LIST_ELEM이 내부에 포함된 구조입니다. 공급하다
-   외부 구조의 이름 STRUCT 및 멤버 이름 MEMBER
-   목록 요소의 상단의 큰댓글을 참고하세요
-   예시 파일입니다. */
+/* Converts pointer to list element LIST_ELEM into a pointer to
+   the structure that LIST_ELEM is embedded inside.  Supply the
+   name of the outer structure STRUCT and the member name MEMBER
+   of the list element.  See the big comment at the top of the
+   file for an example. */
 #define list_entry(LIST_ELEM, STRUCT, MEMBER)           \
 	((STRUCT *) ((uint8_t *) &(LIST_ELEM)->next     \
 		- offsetof (STRUCT, MEMBER.next)))
 
 void list_init (struct list *);
 
-/* 순회를 나열합니다. */
+/* List traversal. */
 struct list_elem *list_begin (struct list *);
 struct list_elem *list_next (struct list_elem *);
 struct list_elem *list_end (struct list *);
@@ -118,37 +118,37 @@ struct list_elem *list_rend (struct list *);
 struct list_elem *list_head (struct list *);
 struct list_elem *list_tail (struct list *);
 
-/* 목록 삽입. */
+/* List insertion. */
 void list_insert (struct list_elem *, struct list_elem *);
 void list_splice (struct list_elem *before,
 		struct list_elem *first, struct list_elem *last);
 void list_push_front (struct list *, struct list_elem *);
 void list_push_back (struct list *, struct list_elem *);
 
-/* 목록 제거. */
+/* List removal. */
 struct list_elem *list_remove (struct list_elem *);
 struct list_elem *list_pop_front (struct list *);
 struct list_elem *list_pop_back (struct list *);
 
-/* 요소를 나열합니다. */
+/* List elements. */
 struct list_elem *list_front (struct list *);
 struct list_elem *list_back (struct list *);
 
-/* 속성을 나열합니다. */
+/* List properties. */
 size_t list_size (struct list *);
 bool list_empty (struct list *);
 
-/* 여러 가지 잡다한. */
+/* Miscellaneous. */
 void list_reverse (struct list *);
 
-/* 주어진 두 목록 요소 A와 B의 값을 비교합니다.
-   보조 데이터 AUX. A가 B보다 작으면 true를 반환합니다.
-   A가 B보다 크거나 같으면 false입니다. */
+/* Compares the value of two list elements A and B, given
+   auxiliary data AUX.  Returns true if A is less than B, or
+   false if A is greater than or equal to B. */
 typedef bool list_less_func (const struct list_elem *a,
                              const struct list_elem *b,
                              void *aux);
 
-/* 순서가 지정된 요소가 있는 목록에 대한 작업입니다. */
+/* Operations on lists with ordered elements. */
 void list_sort (struct list *,
                 list_less_func *, void *aux);
 void list_insert_ordered (struct list *, struct list_elem *,
@@ -156,7 +156,7 @@ void list_insert_ordered (struct list *, struct list_elem *,
 void list_unique (struct list *, struct list *duplicates,
                   list_less_func *, void *aux);
 
-/* 최대 및 최소 */
+/* Max and min. */
 struct list_elem *list_max (struct list *, list_less_func *, void *aux);
 struct list_elem *list_min (struct list *, list_less_func *, void *aux);
 

@@ -4,10 +4,10 @@
 #include <list.h>
 #include <stdbool.h>
 
-/* 카운팅 세마포어. */
+/* A counting semaphore. */
 struct semaphore {
-	unsigned value;             /* 현재 값. */
-	struct list waiters;        /* 대기 중인 스레드 목록. */
+	unsigned value;             /* Current value. */
+	struct list waiters;        /* List of waiting threads. */
 };
 
 void sema_init (struct semaphore *, unsigned value);
@@ -16,10 +16,10 @@ bool sema_try_down (struct semaphore *);
 void sema_up (struct semaphore *);
 void sema_self_test (void);
 
-/* 락. */
+/* Lock. */
 struct lock {
-	struct thread *holder;      /* 락을 보유한 스레드(디버깅용). */
-	struct semaphore semaphore; /* 접근을 제어하는 바이너리 세마포어. */
+	struct thread *holder;      /* Thread holding lock (for debugging). */
+	struct semaphore semaphore; /* Binary semaphore controlling access. */
 };
 
 void lock_init (struct lock *);
@@ -28,9 +28,9 @@ bool lock_try_acquire (struct lock *);
 void lock_release (struct lock *);
 bool lock_held_by_current_thread (const struct lock *);
 
-/* 조건변수. */
+/* Condition variable. */
 struct condition {
-	struct list waiters;        /* 대기 중인 스레드 목록. */
+	struct list waiters;        /* List of waiting threads. */
 };
 
 void cond_init (struct condition *);
@@ -38,10 +38,11 @@ void cond_wait (struct condition *, struct lock *);
 void cond_signal (struct condition *, struct lock *);
 void cond_broadcast (struct condition *, struct lock *);
 
-/* 최적화 장벽.
+/* Optimization barrier.
  *
- * 컴파일러는 최적화 장벽을 가로질러 연산을 재배치하지 않는다.
- * 자세한 내용은 참조 가이드의 "Optimization Barriers"를 참조한다. */
+ * The compiler will not reorder operations across an
+ * optimization barrier.  See "Optimization Barriers" in the
+ * reference guide for more information.*/
 #define barrier() asm volatile ("" : : : "memory")
 
 #endif /* threads/synch.h */
