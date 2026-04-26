@@ -112,6 +112,7 @@ thread_init (void) {
 /* 전역 스레드 컨텍스트를 초기화한다. */
 	lock_init (&tid_lock);
 	list_init (&ready_list);
+	list_init (&sleep_list);
 	list_init (&destruction_req);
 
 	/* 실행 중인 스레드에 대한 스레드 구조를 설정합니다. */
@@ -314,6 +315,7 @@ thread_yield (void) {
 }
 void
 thread_sleep(int64_t wakeup_tick) {
+	
 	//TODO 
 	struct thread *curr = thread_current ();
 	enum intr_level old_level;
@@ -332,17 +334,21 @@ thread_sleep(int64_t wakeup_tick) {
 
 void
 threads_wakeup(int64_t ticks) {
+	
+
 	ASSERT (intr_context ());
 	ASSERT (intr_get_level () == INTR_OFF);
 	//TODO
 	struct list_elem *curr = list_begin(&sleep_list);
 
-
 	while (curr != list_end(&sleep_list)) {
-			if (list_entry (curr, struct thread, elem) ->wakeup_tick == ticks) {
+			struct thread *curr_thread = list_entry (curr, struct thread, elem);
+			if (curr_thread ->wakeup_tick == ticks) {
 					curr = list_remove(curr); 
-					list_push_back (&ready_list, curr);
-				
+
+					ASSERT (curr_thread->status == THREAD_BLOCKED);
+					list_push_back (&ready_list, &curr_thread->elem);
+					curr_thread->status = THREAD_READY;
 			} else {
 					curr = list_next(curr);
 			}
