@@ -1,0 +1,168 @@
+{
+  "title": "Pintos Threads 구현 지도",
+  "subtitle": "테스트 -> 기대 동작 -> 코드 위치 -> 채워야 할 빈칸",
+  "fill_label": "채우기",
+  "columns": [
+    {
+      "title": "테스트",
+      "items": [
+        {
+          "title": "alarm-* 테스트",
+          "body": "alarm-single, multiple, simultaneous, priority, zero, negative",
+          "tone": "blue",
+          "tags": ["타이머"]
+        },
+        {
+          "title": "priority-* 테스트",
+          "body": "preempt, change, fifo, sema, condvar",
+          "tone": "green",
+          "tags": ["스케줄러"]
+        },
+        {
+          "title": "donate-* 테스트",
+          "body": "one, multiple, nest, sema, lower, chain",
+          "tone": "yellow",
+          "tags": ["락"]
+        },
+        {
+          "title": "mlfqs-* 테스트",
+          "body": "load, recent_cpu, fair, nice, block",
+          "tone": "purple",
+          "tags": ["고급"]
+        },
+        {
+          "title": "구현 순서",
+          "body": "alarm -> priority -> donation -> mlfqs",
+          "tone": "gray",
+          "tags": ["계획"]
+        }
+      ]
+    },
+    {
+      "title": "기대 동작",
+      "items": [
+        {
+          "title": "바쁘게 기다리지 않기",
+          "body": "timer_sleep은 현재 스레드를 깨울 tick까지 block한다",
+          "tone": "blue",
+          "blank": "깨울 조건"
+        },
+        {
+          "title": "높은 우선순위 먼저",
+          "body": "ready list와 waiter list는 effective priority가 가장 높은 스레드를 고른다",
+          "tone": "green",
+          "blank": "비교 규칙"
+        },
+        {
+          "title": "우선순위 기부",
+          "body": "락을 기다리는 높은 우선순위 스레드가 락 보유자를 끌어올린다",
+          "tone": "yellow",
+          "blank": "기부 경로"
+        },
+        {
+          "title": "동적 우선순위",
+          "body": "priority는 recent_cpu, nice, load_avg로 계산된다",
+          "tone": "purple",
+          "blank": "fixed-point 식"
+        },
+        {
+          "title": "양보 지점",
+          "body": "더 높은 우선순위 스레드가 생기면 곧 CPU를 넘긴다",
+          "tone": "gray",
+          "blank": "yield 조건"
+        }
+      ]
+    },
+    {
+      "title": "코드 위치",
+      "items": [
+        {
+          "title": "timer.c",
+          "body": "timer_sleep(), timer_interrupt(), 전역 sleep queue",
+          "tone": "blue",
+          "blank": "sleep_list"
+        },
+        {
+          "title": "thread.c",
+          "body": "ready_list, thread_unblock(), thread_yield(), next_thread_to_run()",
+          "tone": "green",
+          "blank": "priority_less()"
+        },
+        {
+          "title": "synch.c",
+          "body": "sema_down/up, lock_acquire/release, cond_wait/signal",
+          "tone": "yellow",
+          "blank": "waiter 정렬"
+        },
+        {
+          "title": "thread.h",
+          "body": "struct thread에 sleep, donation, mlfqs용 필드 추가",
+          "tone": "purple",
+          "blank": "새 필드"
+        },
+        {
+          "title": "interrupt.c",
+          "body": "interrupt 안에서는 intr_yield_on_return으로 선점 예약",
+          "tone": "gray",
+          "blank": "interrupt 상황"
+        }
+      ]
+    },
+    {
+      "title": "채워야 할 빈칸",
+      "items": [
+        {
+          "title": "Alarm 필드",
+          "body": "깨울 tick과 sleep list 전용 list_elem",
+          "tone": "blue",
+          "blank": "int64_t ________, list_elem ________"
+        },
+        {
+          "title": "Priority 헬퍼",
+          "body": "effective priority 비교 함수와 ready_list 삽입 함수",
+          "tone": "green",
+          "blank": "_________less(), maybe_yield()"
+        },
+        {
+          "title": "Donation 필드",
+          "body": "base priority, donor list, 기다리는 lock, 보유 lock 관계",
+          "tone": "yellow",
+          "blank": "base ________, waiting ________"
+        },
+        {
+          "title": "MLFQS 필드",
+          "body": "nice, recent_cpu, load_avg와 재계산 주기",
+          "tone": "purple",
+          "blank": "nice, recent_cpu, load_avg"
+        },
+        {
+          "title": "테스트 체크포인트",
+          "body": "한 그룹을 통과한 뒤 다음 그룹으로 넘어간다",
+          "tone": "gray",
+          "blank": "make check TESTS=threads/________"
+        }
+      ]
+    }
+  ],
+  "arrows": [
+    {"from": [0, 0], "to": [1, 0], "label": "요구"},
+    {"from": [1, 0], "to": [2, 0], "label": "수정"},
+    {"from": [2, 0], "to": [3, 0], "label": "채움"},
+
+    {"from": [0, 1], "to": [1, 1], "label": "요구"},
+    {"from": [1, 1], "to": [2, 1], "label": "수정"},
+    {"from": [2, 1], "to": [3, 1], "label": "채움"},
+
+    {"from": [0, 2], "to": [1, 2], "label": "요구"},
+    {"from": [1, 2], "to": [2, 2], "label": "수정"},
+    {"from": [2, 2], "to": [3, 2], "label": "채움"},
+
+    {"from": [0, 3], "to": [1, 3], "label": "요구"},
+    {"from": [1, 3], "to": [2, 3], "label": "수정"},
+    {"from": [2, 3], "to": [3, 3], "label": "채움"},
+
+    {"from": [0, 4], "to": [1, 4], "label": "안내"},
+    {"from": [1, 4], "to": [2, 4], "label": "확인"},
+    {"from": [2, 4], "to": [3, 4], "label": "검증"}
+  ]
+}

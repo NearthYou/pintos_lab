@@ -2,8 +2,10 @@
 #include <debug.h>
 #include <stddef.h>
 #include <random.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include "list.h"
 #include "threads/flags.h"
 #include "threads/interrupt.h"
 #include "threads/intr-stubs.h"
@@ -27,6 +29,8 @@
 /* THREAD_READY 상태인 프로세스, 즉 프로세스 목록
    실행할 준비가 되었지만 실제로 실행되지는 않습니다. */
 static struct list ready_list;
+
+static struct list sleep_list;
 
 /* 유휴 스레드. */
 static struct thread *idle_thread;
@@ -304,8 +308,42 @@ thread_yield (void) {
 	old_level = intr_disable ();
 	if (curr != idle_thread)
 		list_push_back (&ready_list, &curr->elem);
+
 	do_schedule (THREAD_READY);
 	intr_set_level (old_level);
+}
+void
+thread_sleep(int64_t wakeup_tick) {
+	//TODO 
+	struct thread *curr = thread_current ();
+	enum intr_level old_level;
+
+	ASSERT (!intr_context ());
+
+	old_level = intr_disable ();
+	if (curr != idle_thread){
+		curr->wakeup_tick = wakeup_tick;
+		list_push_back (&sleep_list, &curr->elem);
+	}
+
+	do_schedule (THREAD_BLOCKED);
+	intr_set_level (old_level);
+}
+
+void
+threads_wakeup(int64_t ticks) {
+	ASSERT (intr_context ());
+	ASSERT (intr_get_level () == INTR_ON);
+
+	struct list_elem *current;
+	current = list_head(&sleep_list);
+	//TODO
+	while ((current = list_next (current)) != list_end (&sleep_list)) { 
+		if(list_entry (current, struct thread, elem) ->wakeup_tick == ticks){
+			list_remove(current);
+			list_push_back (&ready_list, current);
+		}
+	}
 }
 
 /* 현재 스레드의 우선순위를 NEW_PRIORITY 으로 설정합니다. */

@@ -1,0 +1,167 @@
+{
+  "title": "Pintos Threads 구현 지도",
+  "subtitle": "tests -> expected behavior -> code surface -> blanks to fill",
+  "columns": [
+    {
+      "title": "Tests",
+      "items": [
+        {
+          "title": "alarm-*",
+          "body": "alarm-single, multiple, simultaneous, priority, zero, negative",
+          "tone": "blue",
+          "tags": ["timer"]
+        },
+        {
+          "title": "priority-*",
+          "body": "preempt, change, fifo, sema, condvar",
+          "tone": "green",
+          "tags": ["scheduler"]
+        },
+        {
+          "title": "donate-*",
+          "body": "one, multiple, nest, sema, lower, chain",
+          "tone": "yellow",
+          "tags": ["locks"]
+        },
+        {
+          "title": "mlfqs-*",
+          "body": "load, recent_cpu, fair, nice, block",
+          "tone": "purple",
+          "tags": ["advanced"]
+        },
+        {
+          "title": "run order",
+          "body": "alarm -> priority -> donation -> mlfqs",
+          "tone": "gray",
+          "tags": ["plan"]
+        }
+      ]
+    },
+    {
+      "title": "Expected Behavior",
+      "items": [
+        {
+          "title": "Sleep, not spin",
+          "body": "timer_sleep blocks current thread until wake tick",
+          "tone": "blue",
+          "blank": "wake condition"
+        },
+        {
+          "title": "Highest first",
+          "body": "ready and waiter lists choose max effective priority",
+          "tone": "green",
+          "blank": "comparison rule"
+        },
+        {
+          "title": "Priority donation",
+          "body": "blocked high-priority thread boosts lock holder",
+          "tone": "yellow",
+          "blank": "donation path"
+        },
+        {
+          "title": "Dynamic priority",
+          "body": "priority comes from recent_cpu, nice, load_avg",
+          "tone": "purple",
+          "blank": "fixed-point formula"
+        },
+        {
+          "title": "Yield points",
+          "body": "new or unblocked higher-priority thread should run soon",
+          "tone": "gray",
+          "blank": "yield trigger"
+        }
+      ]
+    },
+    {
+      "title": "Code Surface",
+      "items": [
+        {
+          "title": "timer.c",
+          "body": "timer_sleep(), timer_interrupt(), global sleep queue",
+          "tone": "blue",
+          "blank": "sleep_list"
+        },
+        {
+          "title": "thread.c",
+          "body": "ready_list, thread_unblock(), thread_yield(), next_thread_to_run()",
+          "tone": "green",
+          "blank": "priority_less()"
+        },
+        {
+          "title": "synch.c",
+          "body": "sema_down/up, lock_acquire/release, cond_wait/signal",
+          "tone": "yellow",
+          "blank": "waiter ordering"
+        },
+        {
+          "title": "thread.h",
+          "body": "struct thread fields for sleep, donation, mlfqs",
+          "tone": "purple",
+          "blank": "new fields"
+        },
+        {
+          "title": "interrupt.c",
+          "body": "intr_yield_on_return for interrupt-safe preemption",
+          "tone": "gray",
+          "blank": "interrupt case"
+        }
+      ]
+    },
+    {
+      "title": "Blanks To Fill",
+      "items": [
+        {
+          "title": "Alarm fields",
+          "body": "wake tick + separate list element for sleepers",
+          "tone": "blue",
+          "blank": "int64_t ________, list_elem ________"
+        },
+        {
+          "title": "Priority helpers",
+          "body": "effective priority comparator and ready-list insertion",
+          "tone": "green",
+          "blank": "_________less(), maybe_yield()"
+        },
+        {
+          "title": "Donation fields",
+          "body": "base priority, donor list, waiting lock, held lock relation",
+          "tone": "yellow",
+          "blank": "base ________, waiting ________"
+        },
+        {
+          "title": "MLFQS fields",
+          "body": "nice, recent_cpu, load_avg and recalculation cadence",
+          "tone": "purple",
+          "blank": "nice, recent_cpu, load_avg"
+        },
+        {
+          "title": "Test checkpoint",
+          "body": "pass one group before moving to the next group",
+          "tone": "gray",
+          "blank": "make check TESTS=threads/________"
+        }
+      ]
+    }
+  ],
+  "arrows": [
+    {"from": [0, 0], "to": [1, 0], "label": "requires"},
+    {"from": [1, 0], "to": [2, 0], "label": "edit"},
+    {"from": [2, 0], "to": [3, 0], "label": "fill"},
+
+    {"from": [0, 1], "to": [1, 1], "label": "requires"},
+    {"from": [1, 1], "to": [2, 1], "label": "edit"},
+    {"from": [2, 1], "to": [3, 1], "label": "fill"},
+
+    {"from": [0, 2], "to": [1, 2], "label": "requires"},
+    {"from": [1, 2], "to": [2, 2], "label": "edit"},
+    {"from": [2, 2], "to": [3, 2], "label": "fill"},
+
+    {"from": [0, 3], "to": [1, 3], "label": "requires"},
+    {"from": [1, 3], "to": [2, 3], "label": "edit"},
+    {"from": [2, 3], "to": [3, 3], "label": "fill"},
+
+    {"from": [0, 4], "to": [1, 4], "label": "guides"},
+    {"from": [1, 4], "to": [2, 4], "label": "check"},
+    {"from": [2, 4], "to": [3, 4], "label": "verify"}
+  ]
+}
