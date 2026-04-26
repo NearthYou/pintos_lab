@@ -333,16 +333,19 @@ thread_sleep(int64_t wakeup_tick) {
 void
 threads_wakeup(int64_t ticks) {
 	ASSERT (intr_context ());
-	ASSERT (intr_get_level () == INTR_ON);
-
-	struct list_elem *current;
-	current = list_head(&sleep_list);
+	ASSERT (intr_get_level () == INTR_OFF);
 	//TODO
-	while ((current = list_next (current)) != list_end (&sleep_list)) { 
-		if(list_entry (current, struct thread, elem) ->wakeup_tick == ticks){
-			list_remove(current);
-			list_push_back (&ready_list, current);
-		}
+	struct list_elem *curr = list_begin(&sleep_list);
+
+
+	while (curr != list_end(&sleep_list)) {
+			if (list_entry (curr, struct thread, elem) ->wakeup_tick == ticks) {
+					curr = list_remove(curr); 
+					list_push_back (&ready_list, curr);
+				
+			} else {
+					curr = list_next(curr);
+			}
 	}
 }
 

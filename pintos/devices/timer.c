@@ -91,7 +91,9 @@ void
 timer_sleep (int64_t ticks) {
 
 	// TODO: 슬립하는 공간에 스레드를 넣어 놓는다.  
-
+	if (ticks <= 0) 
+		return;
+	
 	ASSERT (intr_get_level () == INTR_ON);
 
 	int64_t start = timer_ticks ();
@@ -130,6 +132,7 @@ timer_interrupt (struct intr_frame *args UNUSED) {
 	// TODO: 매 ticks마다 잠들어 있는 list를 확인해서 ready로 이동시켜준다.
 	ticks++;
 	thread_tick ();
+	threads_wakeup(ticks);
 }
 
 /* LOOPS번 반복하는 데 타이머 tick 하나보다 오래 걸리면 true를,
