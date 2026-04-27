@@ -95,6 +95,10 @@ struct thread {
 	/* thread.c와 synch.c 간에 공유됩니다. */
 	struct list_elem elem;              /* 목록 요소. */
 
+	// 잠든 스레드를 깨울 시간을 저장할 변수
+	int64_t wakeup_tick;
+	
+
 #ifdef USERPROG
 	/* userprog/process.c가 소유합니다. */
 	uint64_t *pml4;                     /* 페이지 맵 레벨 4 */
@@ -132,6 +136,7 @@ const char *thread_name (void);
 
 void thread_exit (void) NO_RETURN;
 void thread_yield (void);
+void thread_sleep(int64_t wakeup_time);
 
 int thread_get_priority (void);
 void thread_set_priority (int);
@@ -142,5 +147,8 @@ int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
 void do_iret (struct intr_frame *tf);
+bool thread_priority_less (const struct list_elem *a,
+					const struct list_elem *b,
+					void *aux UNUSED);
 
 #endif /* threads/thread.h */
