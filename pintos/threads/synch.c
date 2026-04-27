@@ -60,7 +60,7 @@ sema_down (struct semaphore *sema) {
 
 	old_level = intr_disable ();
 	while (sema->value == 0) {
-		list_push_back (&sema->waiters, &thread_current ()->elem);
+		list_insert_ordered (&sema->waiters, &thread_current ()->elem, thread_priority_less, NULL);
 		thread_block ();
 	}
 	sema->value--;
@@ -99,15 +99,26 @@ sema_try_down (struct semaphore *sema) {
 void
 sema_up (struct semaphore *sema) {
 	enum intr_level old_level;
+	struct thread *temp = NULL;
 
 	ASSERT (sema != NULL);
 
 	old_level = intr_disable ();
-	if (!list_empty (&sema->waiters))
-		thread_unblock (list_entry (list_pop_front (&sema->waiters),
-					struct thread, elem));
+    if (!list_empty (&sema->waiters)) {
+      list_sort (&sema->waiters, thread_priority_less, NULL);
+      temp = list_entry (list_pop_front (&sema->waiters),
+                              struct thread, elem);
+      thread_unblock (temp);
+    }
 	sema->value++;
 	intr_set_level (old_level);
+
+    if (temp && thread_current ()->priority < temp->priority) {
+      if (intr_context ())
+        intr_yield_on_return ();
+      else
+        thread_yield ();
+    }
 }
 
 static void sema_test_helper (void *sema_);
@@ -234,6 +245,7 @@ lock_held_by_current_thread (const struct lock *lock) {
 struct semaphore_elem {
 	struct list_elem elem;              /* 목록 요소. */
 	struct semaphore semaphore;         /* 이 세마포어. */
+	int priority;                       /* 대기 중인 스레드의 우선순위. */
 };
 
 /* 조건 변수 COND 을 초기화합니다. 조건 변수
@@ -266,6 +278,18 @@ cond_init (struct condition *cond) {
    인터럽트 핸들러. 이 함수는 다음과 같이 호출될 수 있습니다.
    인터럽트는 비활성화되지만 다음과 같은 경우 인터럽트가 다시 켜집니다.
    우리는 자야 해. */
+
+static bool
+cond_priority_less (const struct list_elem *a,
+					const struct list_elem *b,
+					void *aux UNUSED)
+{
+	struct semaphore_elem *sa = list_entry (a, struct semaphore_elem, elem);
+	struct semaphore_elem *sb = list_entry (b, struct semaphore_elem, elem);
+
+	return sa->priority > sb->priority;
+}
+
 void
 cond_wait (struct condition *cond, struct lock *lock) {
 	struct semaphore_elem waiter;
@@ -276,7 +300,8 @@ cond_wait (struct condition *cond, struct lock *lock) {
 	ASSERT (lock_held_by_current_thread (lock));
 
 	sema_init (&waiter.semaphore, 0);
-	list_push_back (&cond->waiters, &waiter.elem);
+	waiter.priority = thread_current ()->priority;
+	list_insert_ordered (&cond->waiters, &waiter.elem, cond_priority_less, NULL);
 	lock_release (lock);
 	sema_down (&waiter.semaphore);
 	lock_acquire (lock);
@@ -296,9 +321,11 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED) {
 	ASSERT (!intr_context ());
 	ASSERT (lock_held_by_current_thread (lock));
 
-	if (!list_empty (&cond->waiters))
+	if (!list_empty (&cond->waiters)) {
+		list_sort(&cond->waiters, cond_priority_less, NULL);
 		sema_up (&list_entry (list_pop_front (&cond->waiters),
-					struct semaphore_elem, elem)->semaphore);
+			struct semaphore_elem, elem)->semaphore);
+	}
 }
 
 /* COND을(를 통해 보호되는) 대기 중인 모든 스레드를 깨웁니다.
