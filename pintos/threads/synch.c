@@ -23,8 +23,10 @@
    */
 
 #include "threads/synch.h"
+#include <stddef.h>
 #include <stdio.h>
 #include <string.h>
+#include "list.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 
@@ -60,7 +62,9 @@ sema_down (struct semaphore *sema) {
 
 	old_level = intr_disable ();
 	while (sema->value == 0) {
-		list_push_back (&sema->waiters, &thread_current ()->elem);
+		printf("sema_while 진입\n");
+		list_insert_ordered(&sema->waiters, &thread_current()->elem, &cmp_priority, NULL);
+		printf("sema_down list_insert 이후\n");
 		thread_block ();
 	}
 	sema->value--;
@@ -103,11 +107,13 @@ sema_up (struct semaphore *sema) {
 	ASSERT (sema != NULL);
 
 	old_level = intr_disable ();
-	if (!list_empty (&sema->waiters))
+	if (!list_empty (&sema->waiters)){
 		thread_unblock (list_entry (list_pop_front (&sema->waiters),
 					struct thread, elem));
+	}
 	sema->value++;
 	intr_set_level (old_level);
+	if (thread_should_yield()) thread_yield();
 }
 
 static void sema_test_helper (void *sema_);
@@ -234,6 +240,7 @@ lock_held_by_current_thread (const struct lock *lock) {
 struct semaphore_elem {
 	struct list_elem elem;              /* 목록 요소. */
 	struct semaphore semaphore;         /* 이 세마포어. */
+	int priority;
 };
 
 /* 조건 변수 COND 을 초기화합니다. 조건 변수
@@ -268,6 +275,7 @@ cond_init (struct condition *cond) {
    우리는 자야 해. */
 void
 cond_wait (struct condition *cond, struct lock *lock) {
+	printf("cond_wait 진입\n");
 	struct semaphore_elem waiter;
 
 	ASSERT (cond != NULL);
@@ -276,10 +284,15 @@ cond_wait (struct condition *cond, struct lock *lock) {
 	ASSERT (lock_held_by_current_thread (lock));
 
 	sema_init (&waiter.semaphore, 0);
-	list_push_back (&cond->waiters, &waiter.elem);
-	lock_release (lock);
+	printf("waitersList 진입 직전\n");
+	list_insert_ordered(&cond->waiters,&waiter.elem,&cmp_priority,NULL);
+	printf("waitersList 진입 직후\n");
+	printf("sema_down 진입 직전\n");
 	sema_down (&waiter.semaphore);
+	printf("sema_down 진입 직후\n");
+	printf("lock_acquire 진입 직전\n");
 	lock_acquire (lock);
+	printf("lock_acquire 진입 직후\n");
 }
 
 /* COND(LOCK 로 보호됨)에서 대기 중인 스레드가 있으면
@@ -291,14 +304,17 @@ cond_wait (struct condition *cond, struct lock *lock) {
    인터럽트 핸들러. */
 void
 cond_signal (struct condition *cond, struct lock *lock UNUSED) {
+	printf("cond_signal 진입\n");
 	ASSERT (cond != NULL);
 	ASSERT (lock != NULL);
 	ASSERT (!intr_context ());
 	ASSERT (lock_held_by_current_thread (lock));
 
 	if (!list_empty (&cond->waiters))
+	printf("!list_empty 진입\n");
 		sema_up (&list_entry (list_pop_front (&cond->waiters),
 					struct semaphore_elem, elem)->semaphore);
+	printf("sema_up 이후\n");
 }
 
 /* COND을(를 통해 보호되는) 대기 중인 모든 스레드를 깨웁니다.

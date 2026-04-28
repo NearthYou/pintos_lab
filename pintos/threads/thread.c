@@ -2,8 +2,10 @@
 #include <debug.h>
 #include <stddef.h>
 #include <random.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include "list.h"
 #include "threads/flags.h"
 #include "threads/interrupt.h"
 #include "threads/intr-stubs.h"
@@ -27,6 +29,8 @@
 /* THREAD_READY 상태인 프로세스, 즉 프로세스 목록
    실행할 준비가 되었지만 실제로 실행되지는 않습니다. */
 static struct list ready_list;
+
+static struct list sleep_list;
 
 /* 유휴 스레드. */
 static struct thread *idle_thread;
@@ -79,6 +83,14 @@ static tid_t allocate_tid (void);
 // 먼저 임시 GDT를 설정하세요.
 static uint64_t gdt[3] = { 0, 0x00af9a000000ffff, 0x00cf92000000ffff };
 
+bool
+cmp_priority (const struct list_elem *a,const struct list_elem *b,void *aux) {
+	struct thread *a_thread = list_entry(a, struct thread, elem);
+	struct thread *b_thread = list_entry(b, struct thread, elem);
+	
+	return a_thread -> priority > b_thread -> priority;
+}
+
 /* 코드를 변환하여 스레딩 시스템을 초기화합니다.
    현재 스레드로 실행 중입니다. 이것은 작동하지 않습니다
    일반적이며 이 경우에만 가능합니다. 왜냐하면 loader.S
@@ -108,6 +120,7 @@ thread_init (void) {
 /* 전역 스레드 컨텍스트를 초기화한다. */
 	lock_init (&tid_lock);
 	list_init (&ready_list);
+	list_init (&sleep_list);
 	list_init (&destruction_req);
 
 	/* 실행 중인 스레드에 대한 스레드 구조를 설정합니다. */
@@ -207,6 +220,10 @@ thread_create (const char *name, int priority,
 	/* 실행 대기열에 추가합니다. */
 	thread_unblock (t);
 
+	struct thread *curr = thread_current ();
+
+	if (curr -> priority < t ->priority) thread_yield();
+
 	return tid;
 }
 
@@ -240,7 +257,10 @@ thread_unblock (struct thread *t) {
 
 	old_level = intr_disable ();
 	ASSERT (t->status == THREAD_BLOCKED);
-	list_push_back (&ready_list, &t->elem);
+
+	list_insert_ordered (&ready_list, &t->elem,
+		&cmp_priority,NULL);
+
 	t->status = THREAD_READY;
 	intr_set_level (old_level);
 }
@@ -303,15 +323,75 @@ thread_yield (void) {
 
 	old_level = intr_disable ();
 	if (curr != idle_thread)
-		list_push_back (&ready_list, &curr->elem);
+		list_insert_ordered (&ready_list, &curr->elem,
+		&cmp_priority,NULL);
+
 	do_schedule (THREAD_READY);
 	intr_set_level (old_level);
+}
+bool
+thread_should_yield(void) {
+	if(!list_empty(&ready_list)){
+		struct list_elem *next_list = list_begin(&ready_list);
+		struct thread *next_thread = list_entry(next_list, struct thread, elem);
+
+		return thread_current() -> priority < next_thread -> priority;
+	}
+	return false;
+}
+
+void
+thread_sleep(int64_t wakeup_tick) {
+	
+	//TODO 
+	struct thread *curr = thread_current ();
+	enum intr_level old_level;
+
+	ASSERT (!intr_context ());
+
+	old_level = intr_disable ();
+	if (curr != idle_thread){
+		curr->wakeup_tick = wakeup_tick;
+		list_push_back (&sleep_list, &curr->elem);
+	}
+
+	do_schedule (THREAD_BLOCKED);
+	intr_set_level (old_level);
+}
+
+void
+threads_wakeup(int64_t ticks) {
+	
+	ASSERT (intr_context ());
+	ASSERT (intr_get_level () == INTR_OFF);
+	struct list_elem *curr = list_begin(&sleep_list);
+
+	while (curr != list_end(&sleep_list)) {
+			struct thread *curr_thread = list_entry (curr, struct thread, elem);
+			if (curr_thread ->wakeup_tick == ticks) {
+					curr = list_remove(curr); 
+
+					ASSERT (curr_thread->status == THREAD_BLOCKED);
+					list_insert_ordered (&ready_list, &curr_thread->elem,
+						&cmp_priority,NULL);
+					curr_thread->status = THREAD_READY;
+			} else {
+					curr = list_next(curr);
+			}
+	}
 }
 
 /* 현재 스레드의 우선순위를 NEW_PRIORITY 으로 설정합니다. */
 void
 thread_set_priority (int new_priority) {
 	thread_current ()->priority = new_priority;
+
+	//ready_list에 처음 있는 값을 가져와서 비교
+	struct list_elem *next_list = list_begin(&ready_list);
+	struct thread *next_thread = list_entry(next_list, struct thread, elem);
+
+	if (thread_current() -> priority < next_thread -> priority) thread_yield();
+
 }
 
 /* 현재 스레드의 우선순위를 반환합니다. */
