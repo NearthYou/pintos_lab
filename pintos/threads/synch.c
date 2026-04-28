@@ -195,13 +195,11 @@ lock_acquire (struct lock *lock) {
 	if (holder != NULL) {
 		cur->wait_on_lock = lock;
 		list_push_back (&holder->donations, &cur->d_elem);
-		if (holder->priority < cur->priority) {
-			holder->priority = cur->priority;
-		}
 
+		// lock holder 체인의 끝(편의상 root)까지 순회하며 이동
 		struct thread *t = holder;
-		while (t != NULL) { // 끝(wait_on_lock이 없는 스레드)까지 가야 함.
-			if (t->priority < cur->priority) { // 중간에 큰 값이 있어도 멈추지 않고, 작으면 갱신
+		while (t != NULL) {
+			if (t->priority < cur->priority) { // 내 우선순위보다 작으면 갱신
 				t->priority = cur->priority;
 			}
 			if (t->wait_on_lock == NULL) {
