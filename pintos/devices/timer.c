@@ -29,6 +29,8 @@ static bool too_many_loops (unsigned loops);
 static void busy_wait (int64_t loops);
 static void real_time_sleep (int64_t num, int32_t denom);
 
+
+
 /* 8254 프로그래머블 인터벌 타이머(PIT)가 초당 PIT_FREQ번
    인터럽트를 발생시키도록 설정하고 해당 인터럽트를 등록한다. */
 void
@@ -88,11 +90,20 @@ timer_elapsed (int64_t then) {
 /* 약 TICKS 타이머 틱 동안 실행을 일시 중지합니다. */
 void
 timer_sleep (int64_t ticks) {
+	
+
+	/* 기존처럼 busy waiting을 위해 while 루프를 도는 대신,
+	
+	이때 thread_sleep()에는 깨어나야 할 alarm time을 전달합니다. 이 값은 start plus ticks, 즉 시작 시각에 ticks를 더한 값입니다.*/
+	if (ticks <= 0)
+		return;
+	
 	int64_t start = timer_ticks ();
 
 	ASSERT (intr_get_level () == INTR_ON);
-	while (timer_elapsed (start) < ticks)
-		thread_yield ();
+
+	thread_sleep(start + ticks);
+	
 }
 
 /* 약 MS밀리초 동안 실행을 일시 중지합니다. */
@@ -124,6 +135,14 @@ static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
 	thread_tick ();
+	thread_wake (ticks);
+		// 이후 timer interrupt가 발생할 때마다 ticks 값이 증가하고, sleep_list를 확인한다.
+		// 현재 tick이 어떤 thread의 wakeup_tick보다 같거나 커지면, 그 thread는 더 이상 잘 필요가 없으므로 block을 해제한다.
+		// block이 해제된 thread는 바로 RUNNING이 되는 것이 아니라 ready_list로 이동한다.
+
+
+
+
 }
 
 /* LOOPS번 반복하는 동안 타이머 틱이 하나 넘게 지나면 true,
