@@ -127,6 +127,7 @@ const char *thread_name (void);
 
 void thread_exit (void) NO_RETURN;
 void thread_yield (void);
+bool thread_should_yield(void);
 void thread_sleep (int64_t wakeup_tick);
 void threads_wakeup (int64_t ticks);
 
@@ -139,5 +140,7 @@ int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
 void do_iret (struct intr_frame *tf);
+
+bool cmp_priority (const struct list_elem *a, const struct list_elem *b, void *aux);
 
 #endif /* threads/thread.h */

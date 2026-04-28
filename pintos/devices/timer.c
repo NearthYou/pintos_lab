@@ -89,8 +89,6 @@ timer_elapsed (int64_t then) {
 /* 대략 TICKS 타이머 tick 동안 실행을 중단한다. */
 void
 timer_sleep (int64_t ticks) {
-	
-
 	// TODO: 슬립하는 공간에 스레드를 넣어 놓는다.  
 	if (ticks <= 0) 
 		return;
