@@ -85,14 +85,27 @@ timer_elapsed (int64_t then) {
 	return timer_ticks () - then;
 }
 
-/* 약 TICKS 타이머 틱 동안 실행을 일시 중지합니다. */
+/* 약 TICKS 타이머 틱 동안 실행을 일시 중지합니다.
+	sleep_list 정의
+	sleep_list 정렬을 하기위한 비교 헬퍼함수 
+	구조체에 스레드 상태에 wakeup_tick 이라는 것을 정의
+
+	timer_sleep 에서  넣어주기전에 timer_interuppt를 비활성화 sleep_list에 넣어주고 블락하고 활성화
+	timer_interruppt   
+*/
 void
 timer_sleep (int64_t ticks) {
+	/* 기존처럼 busy waiting을 위해 while 루프를 도는 대신,
+	
+	이때 thread_sleep()에는 깨어나야 할 alarm time을 전달합니다. 이 값은 start plus ticks, 즉 시작 시각에 ticks를 더한 값입니다.*/
+	if (ticks <= 0)
+		return;
+	
 	int64_t start = timer_ticks ();
 
 	ASSERT (intr_get_level () == INTR_ON);
-	while (timer_elapsed (start) < ticks)
-		thread_yield ();
+
+	thread_sleep (start + ticks);
 }
 
 /* 약 MS밀리초 동안 실행을 일시 중지합니다. */
@@ -124,6 +137,7 @@ static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
 	thread_tick ();
+	thread_wake (ticks);
 }
 
 /* LOOPS번 반복하는 동안 타이머 틱이 하나 넘게 지나면 true,
