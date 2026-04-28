@@ -281,12 +281,7 @@ thread_semaphore_more (const struct list_elem *a,
 {
 		const struct semaphore_elem *ta = list_entry (a, struct semaphore_elem, elem);
 		const struct semaphore_elem *tb = list_entry (b, struct semaphore_elem, elem);
-		// a는 semaphore_elem
-		// -> a 안의 semaphore를 꺼냄
-		// -> 그 semaphore.waiters 맨 앞 thread를 꺼냄
-		// -> 그 thread priority를 봄
 		
-
 		// const struct thread *tc = list_entry(list_front(&ta->semaphore.waiters), struct thread, elem);
 		// const struct thread *td = list_entry(list_front(&tb->semaphore.waiters), struct thread, elem);
 		
