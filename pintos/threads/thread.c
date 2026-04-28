@@ -28,7 +28,6 @@
    실행할 준비가 되었지만 실제로 실행되지는 않습니다. */
 static struct list ready_list;
 
-// 잠들 
 static struct list sleep_list;
 
 /* 유휴 스레드. */
@@ -111,7 +110,7 @@ thread_init (void) {
 /* 전역 스레드 컨텍스트를 초기화한다. */
 	lock_init (&tid_lock);
 	list_init (&ready_list);
-	list_init(&sleep_list);
+	list_init (&sleep_list);
 	list_init (&destruction_req);
 
 	/* 실행 중인 스레드에 대한 스레드 구조를 설정합니다. */
@@ -181,7 +180,8 @@ return ta->priority > tb->priority;
 }
 
 void
-thread_sleep (int64_t wakeup_time){
+thread_sleep (int64_t wakeup_time)
+{
 	// 아직 깨어날 시간이 남아 있다면 thread_sleep()을 호출해서 자기 자신을 sleep list에 넣습니다.
 	// wakeup_tick 을 계산하는 함수
 	struct thread *cur = thread_current();
@@ -194,9 +194,10 @@ thread_sleep (int64_t wakeup_time){
 }
 
 void
-thread_wake (int64_t ticks) {
+thread_wake (int64_t ticks)
+{
 	// wakeup_tick이랑 global ticks을 비교해 wakeup_tick이 global ticks에 도달하게 된다면 그 스레드를 깨운다
-	// 그리고 sleep list 에서 꺼내면서 수정하고 read_list 에 넣으면서 수정하는데 그과정에서 interuppt 을 비활성화해준다.
+	// 그리고 sleep list 에서 꺼내면서 수정하고 read_list 에 넣으면서 수정하는데 그과정에서 interruppt 을 비활성화해준다.
 	while (!list_empty(&sleep_list)) {
 		// 빌때까지 반복문을 실행 안에서 wakeup_tick이랑 ticks를 계속 순회하면서 비교 
 		// 그리고 wakeup_tick이 ticks와 같아질 경우 wakeup_tick을 가진 스레드 깨움

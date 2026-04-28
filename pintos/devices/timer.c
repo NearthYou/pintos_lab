@@ -91,7 +91,7 @@ timer_elapsed (int64_t then) {
 	구조체에 스레드 상태에 wakeup_tick 이라는 것을 정의
 
 	timer_sleep 에서  넣어주기전에 timer_interuppt를 비활성화 sleep_list에 넣어주고 블락하고 활성화
-	timer_interuppt   
+	timer_interruppt   
 */
 void
 timer_sleep (int64_t ticks) {
@@ -105,7 +105,7 @@ timer_sleep (int64_t ticks) {
 
 	ASSERT (intr_get_level () == INTR_ON);
 
-	thread_sleep(start + ticks);
+	thread_sleep (start + ticks);
 }
 
 /* 약 MS밀리초 동안 실행을 일시 중지합니다. */
