@@ -137,15 +137,10 @@ timer_interrupt (struct intr_frame *args UNUSED) {
 	thread_tick ();
 	thread_wake (ticks);
 		// 이후 timer interrupt가 발생할 때마다 ticks 값이 증가하고, sleep_list를 확인한다.
-
 		// 현재 tick이 어떤 thread의 wakeup_tick보다 같거나 커지면, 그 thread는 더 이상 잘 필요가 없으므로 block을 해제한다.
-
 		// block이 해제된 thread는 바로 RUNNING이 되는 것이 아니라 ready_list로 이동한다.
 
-		/* TODO: sleep_list를 앞에서부터 확인한다. */
-		/* TODO: wakeup_tick <= ticks 인 sleeping thread들을 모두 깨운다. */
-		/* TODO: 깨울 때는 thread_unblock()을 사용하여 READY 상태로 되돌린다. */
-		/* TODO: 아직 일어날 시간이 되지 않은 thread가 나오면 정렬된 sleep_list 특성을 이용해 확인을 멈춘다 */
+
 
 
 }

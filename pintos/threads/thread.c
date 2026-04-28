@@ -220,8 +220,8 @@ thread_wakeup_less (const struct list_elem *a,
 					const struct list_elem *b,
 					void *aux UNUSED)
 {
-const struct thread *ta = list_entry (a, struct thread, elem);
-const struct thread *tb = list_entry (b, struct thread, elem);
+		const struct thread *ta = list_entry (a, struct thread, elem);
+		const struct thread *tb = list_entry (b, struct thread, elem);
 
 return ta->wakeup_tick < tb->wakeup_tick;
 }
@@ -231,8 +231,8 @@ thread_priority_more (const struct list_elem *a,
 					const struct list_elem *b,
 					void *aux UNUSED)
 {
-const struct thread *ta = list_entry (a, struct thread, elem);
-const struct thread *tb = list_entry (b, struct thread, elem);
+		const struct thread *ta = list_entry (a, struct thread, elem);
+		const struct thread *tb = list_entry (b, struct thread, elem);
 
 return ta->priority > tb->priority;
 }
@@ -283,7 +283,7 @@ thread_sleep (int64_t wakeup_time){
 	list_insert_ordered(&sleep_list, &cur->elem, thread_wakeup_less, NULL);
 	thread_block();
 	intr_set_level (old_level);
-	return;
+	
 }
 void
 thread_wake (int64_t ticks) {

@@ -61,7 +61,7 @@ sema_down (struct semaphore *sema) {
 	old_level = intr_disable ();
 	while (sema->value == 0) {
 		
-		list_insert_ordered (&sema->waiters, &thread_current ()->elem,thread_priority_more ,NULL);
+		list_insert_ordered (&sema->waiters, &thread_current ()->elem, thread_priority_more, NULL);
 		thread_block (); 
 	}
 	/* Semaphore를 바로 획득할 수 없으면 현재 thread를 
@@ -241,7 +241,7 @@ lock_held_by_current_thread (const struct lock *lock) {
 struct semaphore_elem {
 	struct list_elem elem;              /* 목록 요소. */
 	struct semaphore semaphore;     
-	int t_priority;    /* 이 세마포어. */
+	int t_priority;    /* 우선순위*/
 };
 
 /* 조건 변수 COND 을 초기화합니다. 조건 변수
@@ -285,8 +285,7 @@ thread_semaphore_more (const struct list_elem *a,
 		// const struct thread *tc = list_entry(list_front(&ta->semaphore.waiters), struct thread, elem);
 		// const struct thread *td = list_entry(list_front(&tb->semaphore.waiters), struct thread, elem);
 		
-
-return  ta->t_priority > tb->t_priority;
+return ta->t_priority > tb->t_priority;
 }
 void
 cond_wait (struct condition *cond, struct lock *lock) {
