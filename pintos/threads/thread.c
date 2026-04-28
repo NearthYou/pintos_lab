@@ -384,7 +384,7 @@ thread_set_priority (int new_priority) {
 	cur->priority = cur->base_priority;
 	if (!list_empty (&cur->donations)) {
 		int max_priority = list_entry (list_min (&cur->donations,
-				cmp_priority, NULL), struct thread, d_elem)->priority;
+				cmp_donors_priority, NULL), struct thread, d_elem)->priority;
 
 		if (cur->priority < max_priority) {
 			cur->priority = max_priority;
@@ -692,5 +692,14 @@ cmp_priority (const struct list_elem *a, const struct list_elem *b,
 	const struct thread *tb = list_entry (b, struct thread, elem);
 
 	/* 같은 priority는 false를 반환해서 기존 항목 뒤에 간다. */
+	return ta->priority > tb->priority;
+}
+
+bool
+cmp_donors_priority (const struct list_elem *a, const struct list_elem *b,
+		void *aux UNUSED) {
+	const struct thread *ta = list_entry (a, struct thread, d_elem);
+	const struct thread *tb = list_entry (b, struct thread, d_elem);
+
 	return ta->priority > tb->priority;
 }

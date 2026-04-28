@@ -162,5 +162,7 @@ void do_iret (struct intr_frame *tf);
 
 bool cmp_priority (const struct list_elem *a,
 		const struct list_elem *b, void *aux UNUSED);
+bool cmp_donors_priority (const struct list_elem *a,
+		const struct list_elem *b, void *aux UNUSED);
 
 #endif /* threads/thread.h */

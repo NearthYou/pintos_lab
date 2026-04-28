@@ -204,7 +204,6 @@ lock_acquire (struct lock *lock) {
 			if (t->priority < cur->priority) { // 중간에 큰 값이 있어도 멈추지 않고, 작으면 갱신
 				t->priority = cur->priority;
 			}
-			t->priority = cur->priority;
 			if (t->wait_on_lock == NULL) {
 				break;
 			}
@@ -265,7 +264,7 @@ lock_release (struct lock *lock) {
 
 	if (!list_empty (&cur->donations)) {
 		int max_priority = list_entry (list_min (&cur->donations,
-				cmp_priority, NULL), struct thread, d_elem)->priority;
+				cmp_donors_priority, NULL), struct thread, d_elem)->priority;
 
 		if (cur->priority < max_priority) {
 			cur->priority = max_priority;
