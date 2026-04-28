@@ -91,7 +91,9 @@ struct thread {
 	enum thread_status status;          /* 스레드 상태. */
 	char name[16];                      /* 이름(디버깅용). */
 	int priority;                       /* 우선순위. */
-
+	// wakeup_tick 정의
+	/* TODO: 이 thread가 깨어나야 하는 절대 tick 시각을 저장할 wakeup_tick 필드를 추가한다. */
+	int64_t wakeup_tick;
 	/* thread.c와 synch.c 간에 공유됩니다. */
 	struct list_elem elem;              /* 목록 요소. */
 
@@ -142,5 +144,10 @@ int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
 void do_iret (struct intr_frame *tf);
+bool
+thread_priority_more (const struct list_elem *a,
+					const struct list_elem *b,
+					void *aux UNUSED);
+					/* 우선순위 정렬 헬퍼 함수 선언 */ 
 
 #endif /* threads/thread.h */

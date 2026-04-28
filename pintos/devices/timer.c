@@ -29,6 +29,12 @@ static bool too_many_loops (unsigned loops);
 static void busy_wait (int64_t loops);
 static void real_time_sleep (int64_t num, int32_t denom);
 
+/* TODO: sleeping thread들을 저장할 sleep_list를 선언한다. */
+
+
+/* TODO: thread의 wakeup_tick을 기준으로 sleep_list 정렬에 사용할 비교 helper함수를 추가한다. */
+// helper(a,b) -> a가 가리키는 스레드와 b가 가리키는 스레드의 wakeup_tick을 비교해서 정렬
+
 /* 8254 프로그래머블 인터벌 타이머(PIT)가 초당 PIT_FREQ번
    인터럽트를 발생시키도록 설정하고 해당 인터럽트를 등록한다. */
 void
@@ -85,14 +91,46 @@ timer_elapsed (int64_t then) {
 	return timer_ticks () - then;
 }
 
+// 	현재 timer_sleep은 busy wait 상태인데, 이 방식은 thread가 계속 CPU를 양보했다가 다시 실행되면서 시간을 확인하므로 CPU 비용이 낭비된다.
+
+
+
+
+// 흐름적으로 timer_sleep()는 현재 thread를 “언제 깨울지 기록하고 BLOCKED로 재우는 함수”이고, 
+// timer_interrupt()는 매 tick마다 시간을 올리면서 “이제 깨울 시간이 된 thread를 READY로 되돌리는 함수”다.
+
+
+
 /* 약 TICKS 타이머 틱 동안 실행을 일시 중지합니다. */
 void
 timer_sleep (int64_t ticks) {
+	
+
+	/* 기존처럼 busy waiting을 위해 while 루프를 도는 대신,
+	
+	이때 thread_sleep()에는 깨어나야 할 alarm time을 전달합니다. 이 값은 start plus ticks, 즉 시작 시각에 ticks를 더한 값입니다.*/
+	if (ticks <= 0)
+		return;
+	
 	int64_t start = timer_ticks ();
 
 	ASSERT (intr_get_level () == INTR_ON);
-	while (timer_elapsed (start) < ticks)
-		thread_yield ();
+
+	thread_sleep(start + ticks);
+	
+		// 그래서 timer_sleep을 호출한 thread는 먼저 자신의 wakeup_tick을 계산한다.
+
+		// 그다음 현재 thread를 sleep_list에 넣고 BLOCKED 상태로 만든다.
+		
+		// sleep_list에서 wakeup_tick을 가지고있는 자고있는 스레드들을 오름차순으로 정렬한다.
+		
+		/* TODO: ticks <= 0 이면 즉시 반환한다. */
+		/* TODO: 현재 thread의 wakeup_tick을 현재 tick 기준으로 계산한다. */
+		/* TODO: 삽입과 block 과정이 timer interrupt와 엇갈리지 않도록 interrupt를 잠시 비활성화한다. */
+		/* TODO: sleep_list가 wakeup_tick 오름차순을 유지하도록 현재 thread를 삽입한다. */
+		/* TODO: 현재 thread를 block 상태로 만든다. */
+		/* TODO: block 이후 interrupt 상태를 적절히 복구한다. */
+
 }
 
 /* 약 MS밀리초 동안 실행을 일시 중지합니다. */
@@ -124,6 +162,19 @@ static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
 	thread_tick ();
+	thread_wake (ticks);
+		// 이후 timer interrupt가 발생할 때마다 ticks 값이 증가하고, sleep_list를 확인한다.
+
+		// 현재 tick이 어떤 thread의 wakeup_tick보다 같거나 커지면, 그 thread는 더 이상 잘 필요가 없으므로 block을 해제한다.
+
+		// block이 해제된 thread는 바로 RUNNING이 되는 것이 아니라 ready_list로 이동한다.
+
+		/* TODO: sleep_list를 앞에서부터 확인한다. */
+		/* TODO: wakeup_tick <= ticks 인 sleeping thread들을 모두 깨운다. */
+		/* TODO: 깨울 때는 thread_unblock()을 사용하여 READY 상태로 되돌린다. */
+		/* TODO: 아직 일어날 시간이 되지 않은 thread가 나오면 정렬된 sleep_list 특성을 이용해 확인을 멈춘다 */
+
+
 }
 
 /* LOOPS번 반복하는 동안 타이머 틱이 하나 넘게 지나면 true,
