@@ -103,7 +103,8 @@ struct thread {
 	/* 특정 락에 대기하고 있는 경우, 그 락을 바라본다. 그 외에는 NULL. */
 	struct lock *wait_on_lock;
 
-	/* d_elem 요소를 가짐. Donors(후원자)의 목록, Multiple Donation 표현 */
+	/* d_elem 요소를 가짐.
+	   Donors(후원자)의 목록, Multiple Donation 표현. 정렬 순서를 보장하지 않음 */
 	struct list donations;
 
 	/* donations로 관리되는 리스트, elem과는 별개로 관리되어야 하므로 필요함 */
@@ -160,9 +161,9 @@ int thread_get_load_avg (void);
 
 void do_iret (struct intr_frame *tf);
 
-bool cmp_priority (const struct list_elem *a,
+bool cmp_priority_more (const struct list_elem *a,
 		const struct list_elem *b, void *aux UNUSED);
-bool cmp_donors_priority (const struct list_elem *a,
+bool cmp_donors_priority_more (const struct list_elem *a,
 		const struct list_elem *b, void *aux UNUSED);
 void refresh_priority_in_donors (void);
 
