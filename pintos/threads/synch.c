@@ -260,16 +260,7 @@ lock_release (struct lock *lock) {
 		}
 	}
 
-	cur->priority = cur->base_priority;
-
-	if (!list_empty (&cur->donations)) {
-		int max_priority = list_entry (list_min (&cur->donations,
-				cmp_donors_priority, NULL), struct thread, d_elem)->priority;
-
-		if (cur->priority < max_priority) {
-			cur->priority = max_priority;
-		}
-	}
+	refresh_priority_in_donors ();
 
 	lock->holder = NULL;
 	sema_up (&lock->semaphore);

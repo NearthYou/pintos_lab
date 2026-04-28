@@ -376,21 +376,8 @@ threads_wakeup (int64_t ticks) {
 /* 현재 스레드의 우선순위를 NEW_PRIORITY 으로 설정합니다. */
 void
 thread_set_priority (int new_priority) {
-	struct thread *cur = thread_current ();
-
-	cur->base_priority = new_priority;
-
-	/* donations 확인해서 priority 올바르게 갱신한다. */
-	cur->priority = cur->base_priority;
-	if (!list_empty (&cur->donations)) {
-		int max_priority = list_entry (list_min (&cur->donations,
-				cmp_donors_priority, NULL), struct thread, d_elem)->priority;
-
-		if (cur->priority < max_priority) {
-			cur->priority = max_priority;
-		}
-	}
-
+	thread_current ()->base_priority = new_priority;
+	refresh_priority_in_donors ();
 	thread_yield_if_needed ();
 }
 
@@ -702,4 +689,23 @@ cmp_donors_priority (const struct list_elem *a, const struct list_elem *b,
 	const struct thread *tb = list_entry (b, struct thread, d_elem);
 
 	return ta->priority > tb->priority;
+}
+
+/* priority를 donations를 순회하면서 올바르게 보정함.
+ * donations에 변화가 생기거나,
+ * lock chain?의 root의 우선순위 변경이 발생했을 때 항상 실행되어야 함.
+ * cmp_priority 와 동일하게 큰게 앞에(작은걸로 판단) 오게 처리. */
+void refresh_priority_in_donors (void) {
+	struct thread *cur = thread_current ();
+
+	cur->priority = cur->base_priority;
+
+	if (!list_empty (&cur->donations)) {
+		int max_priority = list_entry (list_min (&cur->donations,
+				cmp_donors_priority, NULL), struct thread, d_elem)->priority;
+
+		if (cur->priority < max_priority) {
+			cur->priority = max_priority;
+		}
+	}
 }
