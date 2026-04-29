@@ -5,6 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/interrupt.h"
+#include "threads/synch.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -95,9 +96,11 @@ struct thread {
 	/* thread.c와 synch.c 간에 공유됩니다. */
 	struct list_elem elem;              /* 목록 요소. */
 
-	// 잠든 스레드를 깨울 시간을 저장할 변수
-	int64_t wakeup_tick;
-	
+    int64_t wakeup_tick;                // alarm clock용
+    int init_priority;                  // donation 받기 전 원래 우선순위
+    struct lock *wait_on_lock;          // 현재 기다리는 lock
+    struct list donations;              // 나에게 donation 한 스레드들
+    struct list_elem donation_elem;
 
 #ifdef USERPROG
 	/* userprog/process.c가 소유합니다. */
@@ -140,6 +143,7 @@ void thread_sleep(int64_t wakeup_time);
 
 int thread_get_priority (void);
 void thread_set_priority (int);
+void thread_update_priority (void);
 
 int thread_get_nice (void);
 void thread_set_nice (int);
