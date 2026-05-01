@@ -18,14 +18,16 @@
 #include "threads/mmu.h"
 #include "threads/vaddr.h"
 #include "intrinsic.h"
+#include "threads/synch.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
 
 static void process_cleanup (void);
-static bool load (const char *file_name, struct intr_frame *if_);
+static bool load (const char *cmd, struct intr_frame *if_);
 static void initd (void *f_name);
 static void __do_fork (void *);
+static int parse_arg(void* cmd, void* arg_buf);
 
 /* initd와 다른 프로세스를 위한 일반 프로세스 초기화 함수. */
 static void
@@ -159,7 +161,6 @@ error:
  * 실패하면 -1을 반환한다. */
 int
 process_exec (void *f_name) {
-	char *file_name = f_name;
 	bool success;
 
 	/* thread 구조체 안의 intr_frame은 사용할 수 없다.
@@ -173,10 +174,22 @@ process_exec (void *f_name) {
 	process_cleanup ();
 
 	/* 그런 다음 바이너리를 로드한다. */
-	success = load (file_name, &_if);
+	success = load (f_name, &_if);
+
+	//TODO: 이건 userprog 작업 끝나고 제거하기. 지금은 중간 확인 필요할 때 켜야해서
+	{
+		printf ("hex dump ================================\n\n");
+		hex_dump (
+			_if.rsp,
+			(const void *) _if.rsp,
+			USER_STACK - _if.rsp,
+			true
+		);
+		printf ("hex dump ================================\n\n");
+	}
 
 	/* load에 실패했으면 종료한다. */
-	palloc_free_page (file_name);
+	palloc_free_page (f_name);
 	if (!success)
 		return -1;
 
@@ -197,6 +210,11 @@ int
 process_wait (tid_t child_tid UNUSED) {
 	/* XXX: 힌트) process_wait(initd)에서 Pintos가 종료된다. process_wait를
 	 * XXX:       구현하기 전에는 여기에 무한 루프를 추가하는 것을 권장한다. */
+
+	//TODO: 나중에 적절하게 바꾸기
+	// 무한루프는 직접 꺼줘야 해서, 스택 확인용으로 적당히 돌다 꺼지게 함.
+	size_t wait = 1 << 20;
+	while (wait) barrier();
 	return -1;
 }
 
@@ -311,13 +329,20 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
  * 실행 파일의 진입점을 *RIP에 저장하고 초기 스택 포인터를 *RSP에 저장한다.
  * 성공하면 true, 그렇지 않으면 false를 반환한다. */
 static bool
-load (const char *file_name, struct intr_frame *if_) {
+load (const char *cmd, struct intr_frame *if_) {
 	struct thread *t = thread_current ();
 	struct ELF ehdr;
 	struct file *file = NULL;
 	off_t file_ofs;
 	bool success = false;
 	int i;
+
+	void *arg_buf = palloc_get_page (0);
+	int argc = parse_arg (cmd, arg_buf);
+	if (argc == -1) // 파싱 실패 시 전체 작업 실패
+		goto done;
+
+	char *file_name = arg_buf;
 
 	/* 페이지 디렉터리를 할당하고 활성화한다. */
 	t->pml4 = pml4_create ();
@@ -402,16 +427,55 @@ load (const char *file_name, struct intr_frame *if_) {
 		goto done;
 
 	/* 시작 주소. */
+	if_->R.rdi = argc;
 	if_->rip = ehdr.e_entry;
+	if_->rsp = USER_STACK;
 
-	/* TODO: 구현 내용을 여기에 작성한다.
-	 * TODO: 인자 전달을 구현한다(project2/argument_passing.html 참고). */
+	// 인자 수 32으로 임의로 제한
+	// TODO: 나중에 지원하는 개수 늘리고 page 할당해서 처리하게 하기 - 당장은 문제 없어보임.
+	uintptr_t arg_buf_addr[32] = {0, }; // 현재 제공된 arg_buf의 메모리 위치
+	uintptr_t stack_argv_addr[32] = {0, }; // stack에 들어간 argv의 메모리 위치
+
+	// 스택에 쓸 때 반대로 써야 해서 포인터 연산이 어려움. 인덱스로 접근 가능하게 배열에 넣기
+	// 외부에서 arg_p에 접근하지 못하게 scope 제한용 중첩
+	{
+		char *arg_p = arg_buf;
+		for (int i = 0; i < argc; i++) {
+			arg_buf_addr[i] = (uintptr_t) arg_p;
+			arg_p += strlen (arg_p) + 1;
+		}
+	}
+
+
+	for (int i = 0; i < argc; i++) {
+		char *arg = (char *) arg_buf_addr[argc - 1 - i];
+		size_t arg_size = strlen (arg) + 1;
+		if_->rsp -= arg_size;		// stack은 커질 때 값이 내려가니까 먼저 내리기
+		strlcpy ((void *) if_->rsp, arg, arg_size);
+		stack_argv_addr[argc - 1 - i] = if_->rsp;
+	}
+
+	if_->rsp = if_->rsp & ~7;		// 비트 연산으로 8의 배수로 내림
+
+	if_->rsp -= sizeof(char *);		// 스택은 바이트 단위로 이동
+	*(char **) if_->rsp = NULL;
+
+	for (int i = 0; i < argc; i++) {
+		if_->rsp -= sizeof(uintptr_t);
+		*(uintptr_t *) if_->rsp = stack_argv_addr[argc - i - 1];	// 역순으로 추가
+	}
+
+	if_->rsp -= sizeof(char *);
+	*(uintptr_t *) if_->rsp = 0;	// fake return address
+
+	if_->rsp -= sizeof(char *);		// rsp를 최종 위치로 이동
 
 	success = true;
 
 done:
 	/* load 성공 여부와 관계없이 여기로 도착한다. */
 	file_close (file);
+	palloc_free_page (arg_buf);
 	return success;
 }
 
@@ -621,3 +685,33 @@ setup_stack (struct intr_frame *if_) {
 	return success;
 }
 #endif /* VM */
+
+
+// 들어온 인자 파싱
+// 반환값은 파싱된 수(argc), 에러나면 -1 반환
+static int
+parse_arg(void* cmd, void* arg_buf) {
+	size_t offset = 0;
+
+	thread_current ();
+
+	char *save_ptr, *token;
+	char *delim = " "; // 구분자, delimiter
+	int argc = 0;
+
+	// 처음에는 처리할 문자열를 넘겨줘야 함. strtok_r() 참고
+	for (token = strtok_r (cmd, delim, &save_ptr);
+		 token != NULL;
+		 token = strtok_r (NULL, delim, &save_ptr)) {
+		size_t token_size = strlen (token) + 1; // null 문자 포함
+		if (PGSIZE - (offset + token_size) < 0) {
+			return -1; // 사이즈 제한 넘어가면 실패
+		}
+		strlcpy (arg_buf + offset, token, token_size);
+		offset += token_size;
+		argc++;
+	}
+	*(char **)(arg_buf + offset) = NULL;
+
+	return argc;
+}
