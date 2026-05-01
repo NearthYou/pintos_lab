@@ -90,7 +90,11 @@ struct thread {
 	tid_t tid;                          /* 스레드 식별자. */
 	enum thread_status status;          /* 스레드 상태. */
 	char name[16];                      /* 이름(디버깅용). */
-	int priority;                       /* 우선순위. */
+	int priority;                       /* 원래 우선순위. */
+	int effect_priority;               /* donation까지 반영된 실제 priority. */
+	struct list donation_list;         /* 이후 multiple donation에서 donor 추적용으로 사용할 리스트. */
+	struct lock *waiting_lock;         /* 현재 이 thread가 기다리고 있는 lock. */
+	struct list_elem donation_elem;    /* donor로 donation_list에 연결될 때 쓰는 전용 elem. */
 	// wakeup_tick 정의
 	/* TODO: 이 thread가 깨어나야 하는 절대 tick 시각을 저장할 wakeup_tick 필드를 추가한다. */
 	int64_t wakeup_tick;
@@ -149,5 +153,12 @@ thread_priority_more (const struct list_elem *a,
 					const struct list_elem *b,
 					void *aux UNUSED);
 					/* 우선순위 정렬 헬퍼 함수 선언 */ 
+bool
+donation_priority_more (const struct list_elem *a,
+                        const struct list_elem *b,
+                        void *aux UNUSED);
+
+void thread_refresh_priority (struct thread *t);
+					
 
 #endif /* threads/thread.h */

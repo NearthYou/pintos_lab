@@ -60,7 +60,8 @@ sema_down (struct semaphore *sema) {
 
 	old_level = intr_disable ();
 	while (sema->value == 0) {
-		
+		/* sema_up()가 가장 높은 우선순위의 대기 thread를 먼저 깨울 수 있도록
+		   semaphore waiters를 priority 순으로 유지합니다. */
 		list_insert_ordered (&sema->waiters, &thread_current ()->elem, thread_priority_more, NULL);
 		thread_block (); 
 	}
@@ -102,18 +103,25 @@ sema_try_down (struct semaphore *sema) {
 void
 sema_up (struct semaphore *sema) {
 	enum intr_level old_level;
+	struct thread *wakeup = NULL;
 
 	ASSERT (sema != NULL);
 
 	old_level = intr_disable ();
-	if (!list_empty (&sema->waiters))
-		thread_unblock (list_entry (list_pop_front (&sema->waiters),
-					struct thread, elem));
+	if (!list_empty (&sema->waiters)) {
+		/* waiters가 정렬된 상태이므로 pop_front()로 가장 우선순위 높은 waiter를 고릅니다. */
+      list_sort(&sema->waiters, thread_priority_more, NULL);
+		wakeup = list_entry (list_pop_front (&sema->waiters),
+							 struct thread, elem);
+		thread_unblock (wakeup);
+	}
 	/* waiters가 비어 있지 않으면 맨 앞의 waiting thread를 깨운다.
-	그다음 semaphore 값을 증가시켜 사용 가능 상태를 반영한다.
-	깨워진 높은 우선순위 스레드가 바로 실행될 수 있도록 현재 thread가 양보할 수도 있다. */
+	   그다음 semaphore 값을 증가시켜 사용 가능 상태를 반영한다.
+	   깨워진 높은 우선순위 스레드가 바로 실행될 수 있도록 현재 thread가 양보할 수도 있다. */
 	sema->value++;
-	thread_yield();
+	/* 방금 깨운 thread가 현재 thread보다 먼저 실행돼야 할 때만 양보합니다. */
+	if (wakeup != NULL && thread_current ()->effect_priority < wakeup->effect_priority)
+		thread_yield ();
 	intr_set_level (old_level);
 }
 
@@ -175,6 +183,29 @@ lock_init (struct lock *lock) {
 	sema_init (&lock->semaphore, 1);
 }
 
+/* nested donation과 chain donation에서는 direct holder만 갱신하면
+   위쪽 lock holder에게는 priority 변화가 전달되지 않는다.
+   그래서 현재 holder부터 시작해서, 그 thread가 또 다른 lock을
+   기다리고 있다면 waiting_lock 체인을 따라가며 effect_priority를
+   다시 계산해 donation 영향을 위로 전파한다. */
+static void
+propagate_donation (struct thread *t) {
+	while (t != NULL) {
+		/* 현재 thread가 받고 있는 donor들을 기준으로
+		   실제 priority를 다시 계산한다. */
+		thread_refresh_priority (t);
+
+		/* 더 이상 기다리는 lock이 없거나, 위쪽 holder가 없으면
+		   donation 전파를 여기서 멈춘다. */
+		if (t->waiting_lock == NULL || t->waiting_lock->holder == NULL)
+			break;
+
+		/* 현재 thread가 기다리는 lock의 holder에게도
+		   donation 영향이 전달될 수 있으므로 한 단계 위로 올라간다. */
+		t = t->waiting_lock->holder;
+	}
+}
+
 /* LOCK을 획득하고, 다음과 같은 경우 사용할 수 있을 때까지 잠자기합니다.
    필요한. 현재 잠금이 이미 보유되어 있지 않아야 합니다.
    실.
@@ -185,13 +216,41 @@ lock_init (struct lock *lock) {
    우리는 자야 해. */
 void
 lock_acquire (struct lock *lock) {
-	ASSERT (lock != NULL);
-	ASSERT (!intr_context ());
-	ASSERT (!lock_held_by_current_thread (lock));
+    ASSERT (lock != NULL);
+    ASSERT (!intr_context ());
+    ASSERT (!lock_held_by_current_thread (lock));
 
-	sema_down (&lock->semaphore);
-	lock->holder = thread_current ();
+    struct thread *curr = thread_current ();
+
+    if (lock->holder != NULL) {
+        /* 현재 thread는 이 lock을 기다리는 중이다. */
+        /* 현재 thread를 block시키고 있는 lock이 무엇인지 기록합니다. */
+        curr->waiting_lock = lock;
+
+        /* holder에게 donation한 donor를 기록한다. */
+        /* 현재 thread를 holder에게 donation한 donor로 등록합니다. */
+        list_insert_ordered (&lock->holder->donation_list,
+                             &curr->donation_elem,
+                             donation_priority_more,
+                             NULL);
+
+        /* holder의 실제 priority를 donor 기준으로 다시 계산한다. */
+        /* 새 donation이 생긴 즉시 holder의 실제 priority를 다시 반영합니다. */
+        /* direct holder만 갱신하면 중간에서 donation이 끊길 수 있으므로
+           waiting_lock 체인을 따라 위 holder까지 priority를 전파한다. */
+        propagate_donation (lock->holder);
+    }
+
+    sema_down (&lock->semaphore);
+    /* sema_down()이 끝나면 현재 thread가 이 lock의 owner가 됩니다. */
+    lock->holder = curr;
+
+    /* lock을 얻었으니 더 이상 기다리는 중이 아니다. */
+    /* lock 획득이 끝났으므로 더 이상 기다리는 상태가 아닙니다. */
+    curr->waiting_lock = NULL;
 }
+
+
 
 /* LOCK 획득을 시도하고 성공하거나 거짓인 경우 true를 반환합니다.
    실패시. 현재 잠금이 이미 보유되어 있지 않아야 합니다.
@@ -220,12 +279,32 @@ lock_try_acquire (struct lock *lock) {
    매니저. */
 void
 lock_release (struct lock *lock) {
-	ASSERT (lock != NULL);
-	ASSERT (lock_held_by_current_thread (lock));
+    ASSERT (lock != NULL);
+    ASSERT (lock_held_by_current_thread (lock));
 
-	lock->holder = NULL;
-	sema_up (&lock->semaphore);
+    struct thread *curr = thread_current ();
+    struct list_elem *e = list_begin (&curr->donation_list);
+
+    /* 현재 release하는 lock 때문에 donation한 donor만 제거한다. */
+    /* 지금 release하는 lock을 기다리던 donor만 donation 목록에서 제거합니다. */
+    while (e != list_end (&curr->donation_list)) {
+        struct thread *donor = list_entry (e, struct thread, donation_elem);
+        struct list_elem *next = list_next (e);
+
+        if (donor->waiting_lock == lock)
+            list_remove (e);
+
+        e = next;
+    }
+
+    /* 남은 donor 기준으로 실제 priority를 다시 계산한다. */
+    /* 남아 있는 donor와 base priority를 기준으로 effective priority를 다시 계산합니다. */
+    thread_refresh_priority (curr);
+
+    lock->holder = NULL;
+    sema_up (&lock->semaphore);
 }
+
 
 /* 현재 스레드에 LOCK이 있으면 true를 반환하고, false를 반환합니다.
    그렇지 않으면. (다른 스레드가 보유하고 있는지 테스트하는 것에 유의하세요.
@@ -291,6 +370,7 @@ void
 cond_wait (struct condition *cond, struct lock *lock) {
 	struct semaphore_elem waiter;
 	struct thread *curr = thread_current();
+	/* cond->waiters를 priority 순으로 유지하기 위해 caller의 priority를 저장합니다. */
 	waiter.t_priority = curr->priority;
 	/* 현재 thread priority를 이 waiter의 priority로 저장한다. */
 	ASSERT (cond != NULL);
@@ -299,6 +379,7 @@ cond_wait (struct condition *cond, struct lock *lock) {
 	ASSERT (lock_held_by_current_thread (lock));
 
 	sema_init (&waiter.semaphore, 0);
+	/* lock을 내려놓고 sleep에 들어가기 전에 waiter를 먼저 리스트에 넣습니다. */
 	list_insert_ordered(&cond->waiters, &waiter.elem, thread_semaphore_more, NULL);
 	/* waiter에 있는 스레드의 우선순위를 기준으로 정렬 */
 	lock_release (lock);
@@ -323,6 +404,7 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED) {
 	if (!list_empty (&cond->waiters))
 		sema_up (&list_entry (list_pop_front (&cond->waiters),
 					struct semaphore_elem, elem)->semaphore);
+	/* cond->waiters가 정렬되어 있으므로 pop_front()로 가장 우선순위 높은 waiter를 깨웁니다. */
 	/* cond waiters의 맨 앞 스레드를 꺼내 sema_up을 해줌 */
 }
 

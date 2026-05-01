@@ -95,6 +95,7 @@ timer_sleep (int64_t ticks) {
 	/* 기존처럼 busy waiting을 위해 while 루프를 도는 대신,
 	
 	이때 thread_sleep()에는 깨어나야 할 alarm time을 전달합니다. 이 값은 start plus ticks, 즉 시작 시각에 ticks를 더한 값입니다.*/
+	/* 상대 시간이 아니라 절대 wakeup tick을 계산해서 busy waiting 대신 block합니다. */
 	if (ticks <= 0)
 		return;
 	
@@ -102,6 +103,7 @@ timer_sleep (int64_t ticks) {
 
 	ASSERT (intr_get_level () == INTR_ON);
 
+	/* sleep_list에는 상대 지연이 아니라 절대 wakeup 시간이 저장됩니다. */
 	thread_sleep(start + ticks);
 	
 }
@@ -138,6 +140,7 @@ timer_interrupt (struct intr_frame *args UNUSED) {
 	thread_wake (ticks);
 		// 이후 timer interrupt가 발생할 때마다 ticks 값이 증가하고, sleep_list를 확인한다.
 		// 현재 tick이 어떤 thread의 wakeup_tick보다 같거나 커지면, 그 thread는 더 이상 잘 필요가 없으므로 block을 해제한다.
+
 		// block이 해제된 thread는 바로 RUNNING이 되는 것이 아니라 ready_list로 이동한다.
 
 

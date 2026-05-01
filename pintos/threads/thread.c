@@ -112,7 +112,7 @@ thread_init (void) {
 	list_init (&ready_list);
 	list_init (&sleep_list);
 	list_init (&destruction_req);
-
+	
 	/* 실행 중인 스레드에 대한 스레드 구조를 설정합니다. */
 	initial_thread = running_thread ();
 	init_thread (initial_thread, "main", PRI_DEFAULT);
@@ -209,7 +209,8 @@ thread_create (const char *name, int priority,
 
 	/* 실행 대기열에 추가합니다. */
 	thread_unblock (t);
-	if (thread_current()->priority < t->priority) {
+	/* 새로 만든 thread의 실제 우선순위가 더 높으면 현재 thread가 양보합니다. */
+	if (thread_current()->effect_priority < t->effect_priority) {
 		thread_yield();
 	}
 	/* 현재 스레드보다 생성한 스레드의 우선순위가 높을때 현재 스레드 cpu 양보 */
@@ -223,7 +224,8 @@ thread_wakeup_less (const struct list_elem *a,
 		const struct thread *ta = list_entry (a, struct thread, elem);
 		const struct thread *tb = list_entry (b, struct thread, elem);
 
-return ta->wakeup_tick < tb->wakeup_tick;
+	/* 더 먼저 깨어나야 하는 thread가 sleep_list의 앞쪽에 오도록 정렬합니다. */
+	return ta->wakeup_tick < tb->wakeup_tick;
 }
 
 bool
@@ -234,8 +236,41 @@ thread_priority_more (const struct list_elem *a,
 		const struct thread *ta = list_entry (a, struct thread, elem);
 		const struct thread *tb = list_entry (b, struct thread, elem);
 
-return ta->priority > tb->priority;
+/* READY queue는 base priority가 아니라 effect_priority 기준으로 정렬합니다. */
+return ta->effect_priority > tb->effect_priority;
 }
+
+bool
+donation_priority_more (const struct list_elem *a,
+                        const struct list_elem *b,
+                        void *aux UNUSED)
+{
+    const struct thread *ta = list_entry (a, struct thread, donation_elem);
+    const struct thread *tb = list_entry (b, struct thread, donation_elem);
+
+    /* donation_list는 가장 강한 donor가 앞쪽에 오도록 정렬합니다. */
+    return ta->effect_priority > tb->effect_priority;
+}
+
+void
+thread_refresh_priority (struct thread *t)
+{
+    /* 먼저 base priority로 시작하고, donor가 더 높으면 그 값으로 올립니다. */
+    t->effect_priority = t->priority;
+
+    if (!list_empty (&t->donation_list)) {
+        list_sort (&t->donation_list, donation_priority_more, NULL);
+
+        struct thread *donor =
+            list_entry (list_front (&t->donation_list),
+                        struct thread, donation_elem);
+
+        /* 맨 앞 donor가 가장 높은 effective priority를 가진 donor입니다. */
+        if (donor->effect_priority > t->effect_priority)
+            t->effect_priority = donor->effect_priority;
+    }
+}
+
 
 /* 현재 스레드를 절전 모드로 전환합니다. 예정되어 있지 않습니다
    thread_unblock()에 의해 깨어날 때까지 다시.
@@ -275,6 +310,8 @@ thread_unblock (struct thread *t) {
 }
 void
 thread_sleep (int64_t wakeup_time){
+	/* 절대 wakeup tick을 저장한 뒤 sleep_list에 넣고,
+	   thread_wake()가 다시 READY로 돌려줄 때까지 block합니다. */
 	// 아직 깨어날 시간이 남아 있다면 thread_sleep()을 호출해서 자기 자신을 sleep list에 넣습니다.
 	// wakeup_tick 을 계산하는 함수
 	struct thread *cur = thread_current();
@@ -287,6 +324,8 @@ thread_sleep (int64_t wakeup_time){
 }
 void
 thread_wake (int64_t ticks) {
+	/* sleep_list is ordered by wakeup time, so we only scan from the front
+	   until we find the first thread that should remain asleep. */
 	// wakeup_tick이랑 global ticks을 비교해 wakeup_tick이 global ticks에 도달하게 된다면 그 스레드를 깨운다
 	// 그리고 sleep list 에서 꺼내면서 수정하고 read_list 에 넣으면서 수정하는데 그과정에서 interuppt 을 비활성화해준다.
 	while (!list_empty(&sleep_list)) {
@@ -295,6 +334,7 @@ thread_wake (int64_t ticks) {
 		struct thread *cur = list_entry (list_front(&sleep_list), struct thread, elem);
 		if (cur->wakeup_tick <= ticks) {
 			list_pop_front(&sleep_list);
+			/* 깨어난 thread는 thread_unblock()을 통해 다시 scheduler에 들어갑니다. */
 			thread_unblock(cur);
 		}
 		else
@@ -374,26 +414,37 @@ thread_yield (void) {
    인터럽트 재활성화 */
 void
 thread_set_priority (int new_priority) {
-	enum intr_level old_level;
-	struct thread *curr = thread_current (); 
-	old_level = intr_disable ();
-	curr->priority = new_priority;
-	
-	if (!list_empty(&ready_list)) {
-		struct thread *old = list_entry(list_front (&ready_list), struct thread, elem);
-		if (curr->priority < old->priority) {
-			thread_yield();
-		}
-		
-	}
-	intr_set_level (old_level);
+    enum intr_level old_level;
+    struct thread *curr = thread_current ();
 
+    old_level = intr_disable ();
+
+    /* thread_set_priority()는 base priority를 바꾸는 함수다. */
+    /* 이 함수는 thread가 직접 설정하는 base priority를 바꿉니다. */
+    curr->priority = new_priority;
+
+    /* donation이 있든 없든, base와 donor 최고값을 기준으로 다시 계산한다. */
+    /* effective priority는 base priority와 donor들을 기준으로 다시 계산합니다. */
+    thread_refresh_priority (curr);
+
+    if (!list_empty (&ready_list)) {
+        struct thread *old =
+            list_entry (list_front (&ready_list), struct thread, elem);
+
+        /* READY 상태의 다른 thread가 실제로 더 높으면 현재 thread가 양보합니다. */
+        if (curr->effect_priority < old->effect_priority)
+            thread_yield ();
+    }
+
+    intr_set_level (old_level);
 }
+
+
 
 /* 현재 스레드의 우선순위를 반환합니다. */
 int
 thread_get_priority (void) {
-	return thread_current ()->priority;
+	return thread_current ()->effect_priority;
 }
 
 /* 현재 스레드의 nice 값을 NICE 으로 설정합니다. */
@@ -483,8 +534,11 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->status = THREAD_BLOCKED;
 	strlcpy (t->name, name, sizeof t->name);
 	t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *);
-	t->priority = priority;
+	t->priority = priority;        /* base priority는 전달받은 초기값으로 시작합니다. */
 	t->magic = THREAD_MAGIC;
+	t->effect_priority = priority; /* 새 thread는 donation이 없는 상태로 시작합니다. */
+	t->waiting_lock = NULL;        /* 새 thread는 아직 어떤 lock도 기다리지 않습니다. */
+	list_init(&t->donation_list);  /* 생성 시점에는 donor가 기록되어 있지 않습니다. */
 }
 
 /* 예약할 다음 스레드를 선택하고 반환합니다. 해야 한다
