@@ -248,13 +248,15 @@ process_exec (void *f_name) {
 
 	/* 그런 다음 바이너리를 로드한다. */
 	success = load (argv[0], &_if);
-	palloc_free_page (file_name);
 
 	/* load에 실패했으면 종료한다. */
-	if (!success)
+	if (!success) {
+		palloc_free_page (file_name);
 		return -1;
+	}
 
 	setup_argument_stack (argv, argc, &_if);
+	palloc_free_page (file_name);
 
 	/* 전환된 프로세스를 시작한다. */
 	do_iret (&_if);
@@ -273,7 +275,7 @@ int
 process_wait (tid_t child_tid UNUSED) {
 	/* XXX: 힌트) process_wait(initd)에서 Pintos가 종료된다. process_wait를
 	 * XXX:       구현하기 전에는 여기에 무한 루프를 추가하는 것을 권장한다. */
-	while (1) {
+	while (1) {  
 	}
 	return -1;
 }
