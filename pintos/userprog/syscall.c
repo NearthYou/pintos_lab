@@ -156,7 +156,7 @@ handle_halt (struct intr_frame *f UNUSED, struct syscall_entry *entry UNUSED) {
 static void
 handle_exit (struct intr_frame *f UNUSED, struct syscall_entry *entry) {
 	int status = entry->args[0];
-	printf("%s:exit(%d)", thread_current(), status);
+	printf("%s: exit(%d)\n", thread_current()->name, status);
 	thread_exit ();
 }
 
