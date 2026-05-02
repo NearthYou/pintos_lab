@@ -129,8 +129,8 @@ dispatch_syscall (struct intr_frame *f, struct syscall_entry *entry) {
 		case SYS_READ:
 			handle_read (f, entry);
 			break;
-		case SYS_WRITE:
-			handle_write (f, entry);
+		case SYS_WRITE:		
+			handle_write (f, entry);		
 			break;
 		case SYS_SEEK:
 			handle_seek (f, entry);
@@ -157,7 +157,6 @@ static void
 handle_exit (struct intr_frame *f UNUSED, struct syscall_entry *entry) {
 	int status = entry->args[0];
 
-	printf ("%s: exit(%d)\n", thread_current ()->name, status);
 	thread_exit ();
 }
 

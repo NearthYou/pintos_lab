@@ -43,6 +43,7 @@ tid_t
 process_create_initd (const char *file_name) {
 	char *fn_copy;
 	tid_t tid;
+	char *prog_copy;
 
 	/* FILE_NAME의 복사본을 만든다.
 	 * 그렇지 않으면 호출자와 load() 사이에 경쟁 상태가 생긴다. */
@@ -50,11 +51,16 @@ process_create_initd (const char *file_name) {
 	if (fn_copy == NULL)
 		return TID_ERROR;
 	strlcpy (fn_copy, file_name, PGSIZE);
-
+	
+	prog_copy = palloc_get_page(0);
+	strlcpy (prog_copy, file_name, PGSIZE);
+	prog_copy =  strtok_r ( prog_copy, " ", &file_name);
 	/* FILE_NAME을 실행할 새 스레드를 만든다. */
-	tid = thread_create (file_name, PRI_DEFAULT, initd, fn_copy);
+	tid = thread_create (prog_copy, PRI_DEFAULT, initd, fn_copy);
+	
 	if (tid == TID_ERROR)
 		palloc_free_page (fn_copy);
+	
 	return tid;
 }
 
@@ -239,12 +245,15 @@ process_exec (void *f_name) {
 	/* 먼저 현재 컨텍스트를 제거한다. */
 	process_cleanup ();
 
+
 	char *argv[MAX_ARGC];
 	int argc = parse_command_line (file_name, argv);
 	if (argc == -1) {
 		palloc_free_page (file_name);
 		return -1;
 	}
+
+
 
 	/* 그런 다음 바이너리를 로드한다. */
 	success = load (argv[0], &_if);
@@ -254,6 +263,7 @@ process_exec (void *f_name) {
 		palloc_free_page (file_name);
 		return -1;
 	}
+
 
 	setup_argument_stack (argv, argc, &_if);
 	palloc_free_page (file_name);
@@ -275,7 +285,10 @@ int
 process_wait (tid_t child_tid UNUSED) {
 	/* XXX: 힌트) process_wait(initd)에서 Pintos가 종료된다. process_wait를
 	 * XXX:       구현하기 전에는 여기에 무한 루프를 추가하는 것을 권장한다. */
-	while (1) {  
+	// while (1) {  
+	// }
+	for (int i = 0; i < 1000; i++) {
+		thread_yield();
 	}
 	return -1;
 }
