@@ -2,22 +2,14 @@
 #include <stdio.h>
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
-#include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/loader.h"
-#include "threads/mmu.h"
 #include "userprog/gdt.h"
-#include "userprog/process.h"
 #include "threads/flags.h"
 #include "intrinsic.h"
 #include "threads/synch.h"
-#include "threads/vaddr.h"
-#include "filesys/file.h"
-#include "filesys/filesys.h"
-#include "lib/kernel/stdio.h"
-#include <string.h>
 
-#define NO_RETURN_VAL (-0x7fffffffffffffffLL - 1)
+#define NO_RETURN_VAL (-1)
 
 struct syscall_entry {
 	/* system call number */
@@ -26,7 +18,7 @@ struct syscall_entry {
 	/* return value (optional, default: NO_RETURN_VAL) */
 	/* 반환값이 필요한 경우 handle_{syscall_name} 함수에서
 	   설정함 */
-	int64_t return_value;
+	uint64_t return_value;
 
 	/* arguments */
 	/* Linux x86-64 system call ABI에선 인자를 6개로 제한함 */
@@ -51,9 +43,6 @@ static void handle_write (struct intr_frame *, struct syscall_entry *);
 static void handle_seek (struct intr_frame *, struct syscall_entry *);
 static void handle_tell (struct intr_frame *, struct syscall_entry *);
 static void handle_close (struct intr_frame *, struct syscall_entry *);
-static bool validate_user_string (const char *);
-static bool validate_user_buffer (const void *, unsigned);
-static void exit_with_status (int status);
 
 /* 시스템 콜.
  *
@@ -157,41 +146,6 @@ dispatch_syscall (struct intr_frame *f, struct syscall_entry *entry) {
 }
 
 /* TODO: 구현하면 UNUSED, ASSERT 빼기 */
-static bool
-validate_user_string (const char *str) {
-	if (str == NULL)
-		return false;
-
-	for (;;) {
-		if (!is_user_vaddr (str) ||
-				pml4_get_page (thread_current ()->pml4, str) == NULL)
-			return false;
-		if (*str == '\0')
-			return true;
-		str++;
-	}
-}
-
-static bool
-validate_user_buffer (const void *buffer, unsigned size) {
-	const char *ptr = buffer;
-
-	if (buffer == NULL)
-		return false;
-	for (unsigned i = 0; i < size; i++) {
-		if (!is_user_vaddr (ptr + i) ||
-				pml4_get_page (thread_current ()->pml4, ptr + i) == NULL)
-			return false;
-	}
-	return true;
-}
-
-static void
-exit_with_status (int status) {
-	thread_current ()->exit_status = status;
-	thread_exit ();
-}
-
 static void
 handle_halt (struct intr_frame *f UNUSED, struct syscall_entry *entry UNUSED) {
 	barrier ();
@@ -199,13 +153,13 @@ handle_halt (struct intr_frame *f UNUSED, struct syscall_entry *entry UNUSED) {
 }
 
 static void
-handle_exit (struct intr_frame *f UNUSED, struct syscall_entry *entry) {
+handle_exit (struct intr_frame *f UNUSED, struct syscall_entry *entry UNUSED) {
 	exit_with_status ((int) entry->args[0]);
 }
 
 /* TODO: 구현하면 UNUSED, ASSERT 빼기 */
 static void
-handle_fork (struct intr_frame *f, struct syscall_entry *entry) {
+handle_fork (struct intr_frame *f UNUSED, struct syscall_entry *entry UNUSED) {
 	const char *thread_name = (const char *) entry->args[0];
 
 	if (!validate_user_string (thread_name)) {
@@ -214,39 +168,20 @@ handle_fork (struct intr_frame *f, struct syscall_entry *entry) {
 	}
 	entry->return_value = process_fork (thread_name, f);
 	return;
+}
+
+/* TODO: 구현하면 UNUSED, ASSERT 빼기 */
+static void
+handle_exec (struct intr_frame *f UNUSED, struct syscall_entry *entry UNUSED) {
 	barrier ();
 	ASSERT (false); /* 현재 처리할 수 없는 syscall */
 }
 
 /* TODO: 구현하면 UNUSED, ASSERT 빼기 */
 static void
-handle_exec (struct intr_frame *f UNUSED, struct syscall_entry *entry) {
-	const char *cmd_line = (const char *) entry->args[0];
-	char *cmd_copy;
-
-	if (!validate_user_string (cmd_line))
-		exit_with_status (-1);
-
-	cmd_copy = palloc_get_page (0);
-	if (cmd_copy == NULL) {
-		entry->return_value = -1;
-		return;
-	}
-	strlcpy (cmd_copy, cmd_line, PGSIZE);
-
-	entry->return_value = process_exec (cmd_copy);
-	if (entry->return_value == -1) {
-		exit_with_status (-1);
-	}
-}
-
-/* TODO: 구현하면 UNUSED, ASSERT 빼기 */
-static void
-handle_wait (struct intr_frame *f UNUSED, struct syscall_entry *entry) {
+handle_wait (struct intr_frame *f UNUSED, struct syscall_entry *entry UNUSED) {
 	entry->return_value = process_wait ((tid_t) entry->args[0]);
 	return;
-	barrier ();
-	ASSERT (false); /* 현재 처리할 수 없는 syscall */
 }
 
 /* TODO: 구현하면 UNUSED, ASSERT 빼기 */
@@ -267,35 +202,7 @@ handle_remove (struct intr_frame *f UNUSED,
 
 /* TODO: 구현하면 UNUSED, ASSERT 빼기 */
 static void
-handle_open (struct intr_frame *f UNUSED, struct syscall_entry *entry) {
-	const char *file_name = (const char *) entry->args[0];
-	struct thread *curr = thread_current ();
-	struct file *file;
-	int fd;
-
-	if (!validate_user_string (file_name)) {
-		entry->return_value = -1;
-		return;
-	}
-
-	file = filesys_open (file_name);
-	if (file == NULL) {
-		entry->return_value = -1;
-		return;
-	}
-
-	for (fd = curr->next_fd; fd < FD_MAX; fd++) {
-		if (curr->fd_table[fd] == NULL) {
-			curr->fd_table[fd] = file;
-			curr->next_fd = fd + 1;
-			entry->return_value = fd;
-			return;
-		}
-	}
-
-	file_close (file);
-	entry->return_value = -1;
-	return;
+handle_open (struct intr_frame *f UNUSED, struct syscall_entry *entry UNUSED) {
 	barrier ();
 	ASSERT (false); /* 현재 처리할 수 없는 syscall */
 }
@@ -310,38 +217,16 @@ handle_filesize (struct intr_frame *f UNUSED,
 
 /* TODO: 구현하면 UNUSED, ASSERT 빼기 */
 static void
-handle_read (struct intr_frame *f UNUSED, struct syscall_entry *entry) {
-	int fd = (int) entry->args[0];
-	void *buffer = (void *) entry->args[1];
-	unsigned size = (unsigned) entry->args[2];
-	struct thread *curr = thread_current ();
-
-	if (!validate_user_buffer (buffer, size))
-		exit_with_status (-1);
-	if (fd < 2 || fd >= FD_MAX || curr->fd_table[fd] == NULL) {
-		entry->return_value = -1;
-		return;
-	}
-
-	entry->return_value = file_read (curr->fd_table[fd], buffer, size);
-	return;
+handle_read (struct intr_frame *f UNUSED, struct syscall_entry *entry UNUSED) {
 	barrier ();
 	ASSERT (false); /* 현재 처리할 수 없는 syscall */
 }
 
 /* TODO: 구현하면 UNUSED, ASSERT 빼기 */
 static void
-handle_write (struct intr_frame *f UNUSED, struct syscall_entry *entry) {
-	int fd = (int) entry->args[0];
-	const void *buffer = (const void *) entry->args[1];
-	unsigned size = (unsigned) entry->args[2];
-
-	if (fd == 1) {
-		putbuf (buffer, size);
-		entry->return_value = size;
-	} else {
-		entry->return_value = -1;
-	}
+handle_write (struct intr_frame *f UNUSED, struct syscall_entry *entry UNUSED) {
+	barrier ();
+	ASSERT (false); /* 현재 처리할 수 없는 syscall */
 }
 
 /* TODO: 구현하면 UNUSED, ASSERT 빼기 */
@@ -360,7 +245,7 @@ handle_tell (struct intr_frame *f UNUSED, struct syscall_entry *entry UNUSED) {
 
 /* TODO: 구현하면 UNUSED, ASSERT 빼기 */
 static void
-handle_close (struct intr_frame *f UNUSED, struct syscall_entry *entry) {
+handle_close (struct intr_frame *f UNUSED, struct syscall_entry *entry UNUSED) {
 	int fd = (int) entry->args[0];
 	struct thread *curr = thread_current ();
 
@@ -371,6 +256,4 @@ handle_close (struct intr_frame *f UNUSED, struct syscall_entry *entry) {
 			curr->next_fd = fd;
 	}
 	return;
-	barrier ();
-	ASSERT (false); /* 현재 처리할 수 없는 syscall */
 }
