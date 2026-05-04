@@ -194,7 +194,7 @@ __do_fork (void *aux) {
 	if_.R.rax = 0;
 
 	/* 2. 페이지 테이블을 복제한다. */
-	current->pml4 = pml4_create();
+	current->pml4 = pml4_create ();
 	if (current->pml4 == NULL)
 		goto error;
 
@@ -334,7 +334,7 @@ process_wait (tid_t child_tid) {
 
 	if (thread_current ()->pml4 != NULL)
 		return -1;
-	sema_down(&initd_wait_sema);
+	sema_down (&initd_wait_sema);
 
 	/*
 		wait-simple, wait-twice, wait-bad-pid, wait-killed까지 가려면
