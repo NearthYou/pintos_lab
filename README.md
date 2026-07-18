@@ -1,103 +1,82 @@
-# 📘 Docker기반 Pintos 개발 환경 구축 가이드 
+# Pintos Phase 1 — Threads & User Programs
 
-이 문서는 **Windows**와 **macOS** 사용자가 Docker와 VSCode DevContainer 기능을 활용하여 Pintos OS 프로젝트를 빠르게 구축할 수 있도록 도와줍니다.
+> A C-based operating-system implementation lab focused on scheduling, synchronization, and user-process lifecycle in KAIST Pintos.
 
-[**주의**]
-* ubunbu:22.04 버전은 충분한 테스트와 검증이 되지 않았습니다. 이 점을 주의해서 사용하시기 바랍니다.
+운영체제의 스케줄링·동기화·프로세스 경계를 교재 설명이 아니라 실제 커널 코드와 테스트로 이해하기 위해 진행한 팀 프로젝트입니다.
 
-[**참고**] 
-* pintos 도커 환경은 `64비트 기반 X86-64` 기반의 `ubuntu:22.04` 버전을 사용합니다.
-   * kaist-pintos는 오리지널 pintos와 달리 64비트 환경을 지원합니다.
-   * 이번 도커 환경은 ubuntu 22.04를 지원하여 vscode의 최신 버전에서 원격 연결이 안되는 문제를 해결하였습니다.
-* pintos 도커 환경은 kaist-pintos에서 추천하는 qemu 에뮬레이터를 설치하고 사용합니다. 
-* pintos 도커 환경은 9주차부터 13주차까지 같은 환경을 사용합니다. 이 기간동안 별도의 개발 환경을 제공하지 않습니다.
-* 기존 도커 환경과 달리 `vscode`와 통합된 디버깅 환경(F5로 시작하는)을 제공하지 않습니다. 디버깅이 필요한 경우 `gdb`를 사용하세요. 
-* vscode에서 터미널을 오픈하면 자동으로 `source /workspaces/pintos_22.04_lab_docker/pintos/activate`를 실행합니다.
+## Project continuity
 
----
+This repository is the Phase 1 implementation record for Threads and User Programs. The work continues in the team’s [Phase 2 virtual-memory repository](https://github.com/whiskend/pintos_302_G1), while the code-free [Pintos project index](https://github.com/NearthYou/pintos-os-lab) connects both phases and their evidence.
 
-## 1. Docker란 무엇인가요?
+## What we implemented
 
-**Docker**는 애플리케이션을 어떤 컴퓨터에서든 **동일한 환경에서 실행**할 수 있게 도와주는 **가상화 플랫폼**입니다.  
+The implementation spans timer-driven scheduling, synchronization primitives, user-process creation and teardown, and the syscall boundary. The table describes team scope; it does not assign every row to one person.
 
-Docker는 다음 구성요소로 이루어져 있습니다:
+| Area | Team implementation | Evidence |
+| --- | --- | --- |
+| Threads | alarm clock, priority scheduling/donation, MLFQS integration | PR #43, PR #46, `thread.c`, `synch.c` |
+| User process lifecycle | fork/exec load synchronization, one-time wait, exit notification and cleanup | PR #166, `process.c` |
+| Syscall boundary | pointer validation, syscall dispatch, files and descriptors | PR #162–#170, `syscall.c` |
+| Kernel/user cleanup safety | USERPROG-conditional exit and interrupt-safe scheduling path | PR #171, `thread.c` |
 
-- **Docker Engine**: 컨테이너를 실행하는 핵심 서비스
-- **Docker Image**: 컨테이너 생성에 사용되는 템플릿 (레시피 📃)
-- **Docker Container**: 이미지를 기반으로 생성된 실제 실행 환경 (요리 🍜)
+In particular, priority donation propagates through lock holders, while `process_exec` and `process_wait` coordinate the observable parent/child lifecycle.
 
-### ✅ AWS EC2와의 차이점
+## Architecture
 
-| 구분 | EC2 같은 VM | Docker 컨테이너 |
-|------|-------------|-----------------|
-| 실행 단위 | OS 포함 전체 | 애플리케이션 단위 |
-| 실행 속도 | 느림 (수십 초 이상) | 매우 빠름 (거의 즉시) |
-| 리소스 사용 | 무거움 | 가벼움 |
+```mermaid
+flowchart LR
+    T["timer interrupt"] --> R["ready/sleep queues"]
+    R --> S["priority scheduler"]
+    S --> D["donation through locks"]
+    U["user process"] --> SC["syscall boundary"]
+    SC --> P["fork / exec / wait / exit"]
+    P --> F["file descriptor and executable lifecycle"]
+```
 
----
+The upper path captures kernel scheduling and synchronization; the lower path follows a user process from its syscall entry to child-state, descriptor, and executable cleanup.
 
-## 2. VSCode DevContainer란 무엇인가요?
+## Key engineering decisions
 
-**DevContainer**는 VSCode에서 Docker 컨테이너를 **개발 환경**처럼 사용할 수 있게 해주는 기능입니다.
+- **Keep wake-up and dispatch policy explicit.** Sleeping threads are ordered by wake-up tick, ready threads are ordered by effective priority, and preemption is checked when a higher-priority thread becomes runnable.
+- **Attach priority donation to lock ownership.** Donation follows the holder chain and is recalculated when lock relationships change, while MLFQS bypasses manual donation.
+- **Synchronize process load and exit as separate events.** Fork/exec load completion, one-time parent wait, child exit notification, and resource cleanup use distinct state so a parent does not confuse “loaded” with “finished.”
+- **Validate at the syscall boundary.** User pointers and strings are checked before kernel dereference; syscall handlers own descriptor and executable-file lifecycle decisions.
+- **Separate kernel-only and user-process teardown.** USERPROG guards prevent kernel threads from entering user-process cleanup, and interrupt context is kept out of unsafe scheduling paths.
 
-- 코드를 실행하거나 디버깅할 때 **컨테이너 내부 환경에서 동작**
-- 팀원 간 **환경 차이 없이 동일한 개발 환경 구성** 가능
-- `.devcontainer` 폴더에 정의된 설정을 VSCode가 읽어 자동 구성
+## Contributions and evidence
 
----
+Personal authorship, team-integrated scope, merged commits, and branch-only exploration are separated in [Contributions — Phase 1](docs/portfolio/CONTRIBUTIONS.md). The distinction matters: repository history is evidence, but an unmerged branch is not evidence of final `main` behavior.
 
-## 3. Docker Desktop 설치하기
+## Fresh verification
 
-1. Docker 공식 사이트에서 설치 파일 다운로드:  
-   👉 [https://www.docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop)
+The fresh run against `main` at `739dc58` on 2026-07-18 produced these concrete summaries:
 
-2. 설치 후 Docker Desktop 실행  
-   - Windows: Docker 아이콘이 트레이에 떠야 함  
-   - macOS: 상단 메뉴바에 Docker 아이콘 확인
+- Threads: `All 27 tests passed.`
+- User Programs: `All 95 tests passed.`
 
----
+Commands, environment details, compiler-warning caveats, and historical merged-PR evidence are recorded in [Phase 1 verification](docs/portfolio/VERIFICATION.md).
 
-## 4. 프로젝트 파일 다운로드 (히스토리 없이)
+## Run locally
 
-터미널(CMD, PowerShell, zsh 등)에서 아래 명령어로 프로젝트 폴더만 내려받습니다:
+Prerequisites are Docker Desktop, Visual Studio Code, and the Dev Containers extension. Open this repository in its checked-in Dev Container, then run:
 
 ```bash
-git clone --depth=1 https://github.com/krafton-jungle/pintos_22.04_lab_docker.git 
+cd pintos
+source ./activate
+make -C threads check
+make -C userprog check
 ```
 
-- `--depth=1` 옵션은 git commit 히스토리를 생략하고 **최신 파일만 가져옵니다.**
+## Known limitations
 
-### 📂 다운로드 후 폴더 구조 설명
+- This phase covers Threads and User Programs; virtual memory is continued in Phase 2.
+- The fresh suites completed successfully, but the current codebase emits compiler warnings. Verification records them rather than presenting warning-free output.
+- Branch-only experiments, including scheduling PR #42, are not evidence of the implementation on final `main`.
 
-```
-pintos_22.04_lab_docker/
-├── .devcontainer/
-│   ├── devcontainer.json      # VSCode에서 컨테이너 환경 설정
-│   └── Dockerfile             # pintos 개발 환경 도커 이미지 정의
-│
-├── pintos
-│   ├── threads                # 9주차 threads 프로젝트 폴더
-│   ├── userprog               # 10-11주차 user program 프로젝트 폴더
-│   └── vm                     # 12-13주차 virtual memory 프로젝트 폴더
-│
-└── README.md                  # 현재 문서
-```
----
+## Continue to Phase 2
 
-## 5. VSCode에서 해당 프로젝트 폴더 열기
+Continue with virtual memory in [pintos_302_G1](https://github.com/whiskend/pintos_302_G1), or return to the cross-phase [Pintos project index](https://github.com/NearthYou/pintos-os-lab) for the portfolio narrative and verification links.
 
-1. VSCode를 실행
-2. `파일 → 폴더 열기`로 방금 클론한 `pintos_22.04_lab_docker` 폴더를 선택
+## License and attribution
 
----
-
-## 6. 개발 컨테이너: 컨테이너에서 열기
-
-1. VSCode에서 `Ctrl+Shift+P` (Windows/Linux) 또는 `Cmd+Shift+P` (macOS)를 누릅니다.
-2. 명령어 팔레트에서 `Dev Containers: Reopen in Container`를 선택합니다.
-3. 이후 컨테이너가 자동으로 실행되고 빌드됩니다. 처음 컨테이너를 열면 빌드하는 시간이 오래걸릴 수 있습니다. 빌드 후, 프로젝트가 **컨테이너 안에서 실행됨**.
-
----
-
-## 7. C 파일에 브레이크포인트 설정 후 디버깅 (F5)
-pintos 랩에서는 vscode기반의 디버깅을 지원하지 않습니다. 
+This repository builds on the KAIST Pintos educational codebase and the original Pintos project. See [`pintos/LICENSE`](pintos/LICENSE) for the source license and attribution terms. Team and personal implementation claims are limited to the evidence documented in this repository.
